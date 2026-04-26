@@ -56,12 +56,14 @@ def test_reminder_lifecycle_can_be_updated(tmp_path) -> None:
         now=now,
         conversation_id="conv-1",
         conversation_type="user",
+        thread_id="topic-1",
     )
 
     updated = store.update_reminder(record.id, status="sent", sent_at=(now + timedelta(minutes=1)).isoformat())
 
     assert updated is not None
     assert updated.status == "sent"
+    assert updated.thread_id == "topic-1"
     assert store.list_reminders()[0].status == "sent"
 
 

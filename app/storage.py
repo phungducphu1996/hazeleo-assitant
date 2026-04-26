@@ -295,6 +295,7 @@ class FileStore:
         now: datetime,
         conversation_id: str | None,
         conversation_type: str,
+        thread_id: str | None = None,
     ) -> ReminderRecord:
         self.ensure_files()
         record = ReminderRecord(
@@ -304,6 +305,7 @@ class FileStore:
             time=reminder_time.isoformat(),
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
+            thread_id=thread_id,
             created_at=now.isoformat(),
         )
         with self._locked():
@@ -321,6 +323,7 @@ class FileStore:
         now: datetime,
         conversation_id: str | None,
         conversation_type: str,
+        thread_id: str | None = None,
     ) -> ReminderRecord:
         self.ensure_files()
         record = ReminderRecord(
@@ -331,6 +334,7 @@ class FileStore:
             time=run_at.isoformat(),
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
+            thread_id=thread_id,
             created_at=now.isoformat(),
         )
         with self._locked():
@@ -349,6 +353,7 @@ class FileStore:
         now: datetime,
         conversation_id: str | None,
         conversation_type: str,
+        thread_id: str | None = None,
     ) -> RecurringAgentTaskRecord:
         self.ensure_files()
         next_run_at = compute_next_daily_run(local_time=local_time, now=now)
@@ -361,6 +366,7 @@ class FileStore:
             timezone=timezone,
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
+            thread_id=thread_id,
             created_at=now.isoformat(),
             next_run_at=next_run_at.isoformat(),
         )

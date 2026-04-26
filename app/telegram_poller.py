@@ -103,5 +103,6 @@ def telegram_update_to_incoming(
         from_uid=str(sender.get("id") or "").strip() or None,
         conversation_id=chat_id,
         conversation_type=conversation_type,
+        thread_id=str(message.get("message_thread_id") or "").strip() or None,
         message_id=str(message.get("message_id") or "").strip() or None,
     )

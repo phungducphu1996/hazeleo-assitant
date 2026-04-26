@@ -26,6 +26,7 @@ class TelegramSender:
         text: str,
         conversation_id: str | None = None,
         conversation_type: str = "user",
+        thread_id: str | None = None,
     ) -> ZaloDeliveryResult:
         del conversation_type
         if not self.configured:
@@ -34,14 +35,17 @@ class TelegramSender:
             return ZaloDeliveryResult(ok=False, error="missing_telegram_chat_id")
 
         try:
+            body: dict[str, Any] = {
+                "chat_id": conversation_id,
+                "text": text,
+                "disable_web_page_preview": True,
+            }
+            if thread_id:
+                body["message_thread_id"] = int(thread_id) if thread_id.isdigit() else thread_id
             async with httpx.AsyncClient(timeout=20.0) as client:
                 response = await client.post(
                     self._method_url("sendMessage"),
-                    json={
-                        "chat_id": conversation_id,
-                        "text": text,
-                        "disable_web_page_preview": True,
-                    },
+                    json=body,
                 )
             data = response.json() if response.content else {}
             if response.status_code >= 400 or not data.get("ok", False):

@@ -16,7 +16,9 @@ class ZaloSender:
         text: str,
         conversation_id: str | None = None,
         conversation_type: str = "user",
+        thread_id: str | None = None,
     ) -> ZaloDeliveryResult:
+        del thread_id
         headers = {"Content-Type": "application/json"}
         if self.settings.zalo_shared_secret:
             headers["X-Internal-Secret"] = self.settings.zalo_shared_secret

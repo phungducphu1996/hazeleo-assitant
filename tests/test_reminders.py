@@ -14,9 +14,25 @@ class FakeSender:
     def __init__(self, *, ok: bool) -> None:
         self.ok = ok
         self.sent: list[str] = []
+        self.sent_payloads: list[dict[str, str | None]] = []
 
-    async def send_text(self, *, text: str, conversation_id: str | None = None, conversation_type: str = "user") -> ZaloDeliveryResult:
+    async def send_text(
+        self,
+        *,
+        text: str,
+        conversation_id: str | None = None,
+        conversation_type: str = "user",
+        thread_id: str | None = None,
+    ) -> ZaloDeliveryResult:
         self.sent.append(text)
+        self.sent_payloads.append(
+            {
+                "text": text,
+                "conversation_id": conversation_id,
+                "conversation_type": conversation_type,
+                "thread_id": thread_id,
+            }
+        )
         return ZaloDeliveryResult(ok=self.ok, error=None if self.ok else "send failed")
 
 
@@ -64,6 +80,29 @@ def test_process_due_once_marks_sent(tmp_path) -> None:
 
     assert handled[0].status == "sent"
     assert sender.sent == ["Nhắc nè: mua sữa"]
+
+
+def test_process_due_once_sends_reminder_to_thread(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    store = FileStore(settings.data_dir)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    store.add_reminder(
+        text="cất cơm",
+        reminder_time=now - timedelta(minutes=1),
+        now=now - timedelta(hours=1),
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+    )
+    sender = FakeSender(ok=True)
+    poller = ReminderPoller(settings=settings, store=store, sender=sender)
+
+    handled = asyncio.run(poller.process_due_once())
+
+    assert handled[0].status == "sent"
+    assert sender.sent_payloads[0]["conversation_id"] == "-100123"
+    assert sender.sent_payloads[0]["conversation_type"] == "group"
+    assert sender.sent_payloads[0]["thread_id"] == "77"
 
 
 def test_process_due_once_renders_static_reminder_with_agent(tmp_path) -> None:

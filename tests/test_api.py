@@ -33,12 +33,14 @@ class FakeSender:
         text: str,
         conversation_id: str | None = None,
         conversation_type: str = "user",
+        thread_id: str | None = None,
     ) -> ZaloDeliveryResult:
         self.sent.append(
             {
                 "text": text,
                 "conversation_id": conversation_id,
                 "conversation_type": conversation_type,
+                "thread_id": thread_id,
             }
         )
         return ZaloDeliveryResult(ok=self.ok, error=None if self.ok else "boom")
@@ -269,8 +271,51 @@ def test_telegram_webhook_processes_message_and_sends_reply(tmp_path) -> None:
             "text": "ăn canh rau với trứng hấp nhẹ nha",
             "conversation_id": "12345",
             "conversation_type": "user",
+            "thread_id": None,
         }
     ]
+
+
+def test_telegram_webhook_replies_in_topic_thread(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="vâng anh chị, tối nay ăn nhẹ nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 111,
+                "message": {
+                    "message_id": 23,
+                    "message_thread_id": 77,
+                    "text": "tối nay ăn gì",
+                    "from": {"id": 999},
+                    "chat": {"id": -100123, "type": "supergroup"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert fake_sender.sent[0]["conversation_id"] == "-100123"
+    assert fake_sender.sent[0]["conversation_type"] == "group"
+    assert fake_sender.sent[0]["thread_id"] == "77"
 
 
 def test_telegram_webhook_saves_agent_task(tmp_path) -> None:

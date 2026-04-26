@@ -17,6 +17,7 @@ class ZaloIncomingRequest(BaseModel):
     from_uid: str | None = Field(default=None, max_length=255)
     conversation_id: str | None = Field(default=None, max_length=255)
     conversation_type: Literal["user", "group"] = "user"
+    thread_id: str | None = Field(default=None, max_length=255)
     message_id: str | None = Field(default=None, max_length=255)
     reply_to_message_id: str | None = Field(default=None, max_length=255)
     reply_to_cli_message_id: str | None = Field(default=None, max_length=255)
@@ -151,6 +152,7 @@ class ReminderRecord(BaseModel):
     time: str
     conversation_id: str | None = None
     conversation_type: Literal["user", "group"] = "user"
+    thread_id: str | None = None
     status: Literal["pending", "sent", "failed"] = "pending"
     attempts: int = 0
     created_at: str
@@ -174,6 +176,7 @@ class RecurringAgentTaskRecord(BaseModel):
     timezone: str = "Asia/Ho_Chi_Minh"
     conversation_id: str | None = None
     conversation_type: Literal["user", "group"] = "user"
+    thread_id: str | None = None
     status: Literal["active", "paused", "failed"] = "active"
     attempts: int = 0
     created_at: str

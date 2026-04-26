@@ -126,6 +126,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             from_uid=str(payload.get("from_uid") or "debug-user"),
             conversation_id=str(payload.get("conversation_id") or "debug-conversation"),
             conversation_type="group" if payload.get("conversation_type") == "group" else "user",
+            thread_id=str(payload.get("thread_id") or "").strip() or None,
         )
         send_reply = bool(payload.get("send", False))
         return await service.handle_incoming(incoming, send_reply=send_reply)

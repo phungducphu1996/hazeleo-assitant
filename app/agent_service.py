@@ -17,6 +17,7 @@ class MessageSender(Protocol):
         text: str,
         conversation_id: str | None = None,
         conversation_type: str = "user",
+        thread_id: str | None = None,
     ):
         ...
 
@@ -135,6 +136,7 @@ class FamilyAssistantService:
                 text=output.reply,
                 conversation_id=payload.conversation_id,
                 conversation_type=payload.conversation_type,
+                thread_id=payload.thread_id,
             )
         self.store.append_conversation_turn(
             now=now,
@@ -188,6 +190,7 @@ class FamilyAssistantService:
             from_uid="scheduled-agent-task",
             conversation_id=record.conversation_id,
             conversation_type=record.conversation_type,
+            thread_id=getattr(record, "thread_id", None),
         )
         agent_prompt = _read_agent_prompt(self.settings.agent_prompt_path)
         recent = self.store.list_recent()
@@ -219,6 +222,7 @@ class FamilyAssistantService:
                 text=f"Mình chưa chạy được task hẹn giờ: {title}",
                 conversation_id=record.conversation_id,
                 conversation_type=record.conversation_type,
+                thread_id=getattr(record, "thread_id", None),
             )
 
         self.store.append_profile_updates(output.memory.profile_updates)
@@ -235,6 +239,7 @@ class FamilyAssistantService:
             text=output.reply,
             conversation_id=record.conversation_id,
             conversation_type=record.conversation_type,
+            thread_id=getattr(record, "thread_id", None),
         )
 
     async def render_static_reminder(self, record: ReminderRecord) -> str:
@@ -249,6 +254,7 @@ class FamilyAssistantService:
             from_uid="scheduled-static-reminder",
             conversation_id=record.conversation_id,
             conversation_type=record.conversation_type,
+            thread_id=record.thread_id,
         )
         try:
             output = await self.model_client.run(
@@ -295,6 +301,7 @@ class FamilyAssistantService:
             now=now,
             conversation_id=payload.conversation_id,
             conversation_type=payload.conversation_type,
+            thread_id=payload.thread_id,
         )
         return True, None
 
@@ -313,6 +320,7 @@ class FamilyAssistantService:
                 now=now,
                 conversation_id=payload.conversation_id,
                 conversation_type=payload.conversation_type,
+                thread_id=payload.thread_id,
             )
         except ValueError:
             return False, "invalid_recurring_agent_task"
@@ -339,6 +347,7 @@ class FamilyAssistantService:
             now=now,
             conversation_id=payload.conversation_id,
             conversation_type=payload.conversation_type,
+            thread_id=payload.thread_id,
         )
         return True, None
 

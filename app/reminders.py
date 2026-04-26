@@ -16,6 +16,7 @@ class MessageSender(Protocol):
         text: str,
         conversation_id: str | None = None,
         conversation_type: str = "user",
+        thread_id: str | None = None,
     ):
         ...
 
@@ -75,6 +76,7 @@ class ReminderPoller:
                         text=f"Mình chưa có runner cho task hẹn giờ: {record.text}",
                         conversation_id=record.conversation_id,
                         conversation_type=record.conversation_type,
+                        thread_id=record.thread_id,
                     )
                 else:
                     delivery = await self.agent_task_runner.run_agent_task(record)
@@ -86,6 +88,7 @@ class ReminderPoller:
                     text=reminder_text,
                     conversation_id=record.conversation_id,
                     conversation_type=record.conversation_type,
+                    thread_id=record.thread_id,
                 )
             if delivery.ok:
                 updated = self.store.update_reminder(
@@ -116,6 +119,7 @@ class ReminderPoller:
                     text=f"Mình chưa có runner cho daily task: {task.title}",
                     conversation_id=task.conversation_id,
                     conversation_type=task.conversation_type,
+                    thread_id=task.thread_id,
                 )
             else:
                 delivery = await self.agent_task_runner.run_agent_task(task)
