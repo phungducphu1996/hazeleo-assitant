@@ -100,6 +100,7 @@ def telegram_update_to_incoming(
 
     return ZaloIncomingRequest(
         text=text,
+        source="telegram",
         from_uid=str(sender.get("id") or "").strip() or None,
         conversation_id=chat_id,
         conversation_type=conversation_type,

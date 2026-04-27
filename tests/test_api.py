@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -10,6 +11,7 @@ from app.config import Settings
 from app.main import create_app
 from app.schemas import AgentMemoryUpdates, AgentOutput, FridgeItemUpdate, ZaloDeliveryResult
 from app.storage import FileStore
+from app.thread_context import build_thread_key
 
 
 class FakeModelClient:
@@ -104,6 +106,90 @@ def test_zalo_incoming_saves_memory_reminder_and_sends_reply(tmp_path) -> None:
     assert store.list_reminders()[0].text == "mua sữa cho Ngọc"
 
 
+def test_schedule_reply_is_guarded_when_model_claims_saved_without_structured_task(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="ok Gia đã thêm task này rồi nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                agent_task=None,
+                repeating_reminder=None,
+                recurring_agent_task=None,
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 115,
+                "message": {
+                    "message_id": 27,
+                    "text": "mai 9h nhắc anh mua sữa",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert "chưa lưu được" in fake_sender.sent[0]["text"]
+    assert store.list_reminders() == []
+
+
+def test_schedule_reply_is_guarded_when_structured_task_save_fails(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    past = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(hours=1)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="ok Gia đã đặt lịch nhắc rồi nha",
+                memory=AgentMemoryUpdates(),
+                reminder={"text": "mua sữa", "time": past.isoformat()},
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 116,
+                "message": {
+                    "message_id": 28,
+                    "text": "nhắc anh mua sữa lúc nãy",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert "thời gian này đã qua" in fake_sender.sent[0]["text"]
+    assert store.list_reminders() == []
+
+
 def test_telegram_webhook_marks_recent_sent_reminder_done(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)
@@ -186,6 +272,32 @@ def test_manual_completion_endpoint_updates_reminder(tmp_path) -> None:
     body = response.json()
     assert body["reminder"]["completion_status"] == "canceled"
     assert body["reminder"]["completion_note"] == "không cần nữa"
+
+
+def test_thread_debug_endpoints_update_prompt_and_rules(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    app = create_app(settings)
+    thread_key = "telegram:-100123:topic:77"
+
+    with TestClient(app) as client:
+        prompt_response = client.put(
+            f"/api/threads/{thread_key}/prompt",
+            json={"prompt": "Thread ăn uống chuyên dinh dưỡng."},
+        )
+        rules_response = client.put(
+            f"/api/threads/{thread_key}/rules",
+            json={"rules": ["Ưu tiên món nhẹ bụng."]},
+        )
+        list_response = client.get("/api/threads")
+        detail_response = client.get(f"/api/threads/{thread_key}")
+
+    assert prompt_response.status_code == 200
+    assert rules_response.status_code == 200
+    assert list_response.status_code == 200
+    assert detail_response.status_code == 200
+    assert list_response.json()["threads"][0]["thread_key"] == thread_key
+    assert "chuyên dinh dưỡng" in detail_response.json()["prompt"]
+    assert "món nhẹ bụng" in detail_response.json()["rules"]
 
 
 def test_test_message_defaults_to_not_sending(tmp_path) -> None:
@@ -318,6 +430,83 @@ def test_telegram_webhook_replies_in_topic_thread(tmp_path) -> None:
     assert fake_sender.sent[0]["thread_id"] == "77"
 
 
+def test_telegram_topic_context_uses_thread_prompt_rules_and_history(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    food_key = build_thread_key(
+        source="telegram",
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+    )
+    chores_key = build_thread_key(
+        source="telegram",
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="88",
+    )
+    assert food_key is not None
+    assert chores_key is not None
+    store.set_thread_prompt(food_key, "Thread ăn uống: trả lời như chuyên gia dinh dưỡng gia đình.")
+    store.append_thread_rules_updates(food_key, ["Ưu tiên món nhẹ cho Ngọc."])
+    store.append_conversation_turn(
+        now=now - timedelta(minutes=4),
+        conversation_id="-100123",
+        thread_key=food_key,
+        from_uid="user-1",
+        role="assistant",
+        text="History ăn uống",
+    )
+    store.append_conversation_turn(
+        now=now - timedelta(minutes=3),
+        conversation_id="-100123",
+        thread_key=chores_key,
+        from_uid="user-1",
+        role="assistant",
+        text="History việc nhà",
+    )
+    model_client = FakeModelClient(
+        AgentOutput(
+            reply="vâng anh chị, Gia gợi ý món nhẹ nha",
+            memory=AgentMemoryUpdates(),
+            reminder=None,
+        )
+    )
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=model_client,
+        sender=FakeSender(),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 113,
+                "message": {
+                    "message_id": 25,
+                    "message_thread_id": 77,
+                    "text": "tối nay ăn gì",
+                    "from": {"id": 999},
+                    "chat": {"id": -100123, "type": "supergroup"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    call = model_client.calls[0]
+    assert call["thread_key"] == food_key
+    assert "chuyên gia dinh dưỡng" in call["thread_prompt"]
+    assert "món nhẹ" in call["thread_rules"]
+    assert [turn["text"] for turn in call["conversation_turns"]] == ["History ăn uống"]
+
+
 def test_telegram_webhook_saves_agent_task(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)
@@ -364,6 +553,47 @@ def test_telegram_webhook_saves_agent_task(tmp_path) -> None:
     assert len(records) == 1
     assert records[0].kind == "agent_task"
     assert records[0].prompt == "Cho mình 3 việc quan trọng nhất ngày mai"
+    assert records[0].thread_key == "telegram:12345:private"
+
+
+def test_run_agent_task_uses_saved_thread_context(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    thread_key = "telegram:-100123:topic:77"
+    store.set_thread_prompt(thread_key, "Thread ăn uống chuyên dinh dưỡng.")
+    store.append_thread_rules_updates(thread_key, ["Ưu tiên tủ lạnh và HSD."])
+    record = store.add_agent_task(
+        title="Gợi ý dinner",
+        prompt="Gợi ý 3 món tối",
+        run_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(hours=1),
+        now=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+        thread_key=thread_key,
+    )
+    model_client = FakeModelClient(
+        AgentOutput(
+            reply="vâng anh chị, tối nay ăn món nhẹ nha",
+            memory=AgentMemoryUpdates(),
+            reminder=None,
+        )
+    )
+    sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=model_client,
+        sender=sender,
+    )
+
+    asyncio.run(service.run_agent_task(record))
+
+    call = model_client.calls[0]
+    assert call["thread_key"] == thread_key
+    assert "chuyên dinh dưỡng" in call["thread_prompt"]
+    assert "HSD" in call["thread_rules"]
+    assert sender.sent[0]["thread_id"] == "77"
 
 
 def test_telegram_webhook_saves_repeating_reminder(tmp_path) -> None:
@@ -417,6 +647,7 @@ def test_telegram_webhook_saves_repeating_reminder(tmp_path) -> None:
     assert records[0].repeat_interval_minutes == 30
     assert records[0].next_run_at == future.isoformat()
     assert records[0].thread_id == "77"
+    assert records[0].thread_key == "telegram:-100123:topic:77"
 
 
 def test_telegram_webhook_saves_recurring_agent_task(tmp_path) -> None:
@@ -466,6 +697,7 @@ def test_telegram_webhook_saves_recurring_agent_task(tmp_path) -> None:
     assert len(records) == 1
     assert records[0].time == "09:00"
     assert records[0].prompt == "Gợi ý đồ ăn trưa đơn giản cho Ngọc"
+    assert records[0].thread_key == "telegram:12345:private"
 
 
 def test_telegram_webhook_saves_fridge_and_daily_meal(tmp_path) -> None:
@@ -842,6 +1074,53 @@ def test_telegram_webhook_saves_rules_update(tmp_path) -> None:
 
     assert response.status_code == 200
     assert "vâng anh chị" in store.read_rules()
+
+
+def test_telegram_webhook_saves_thread_rules_and_prompt_update(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="vâng anh chị, Gia chỉnh prompt thread này rồi nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                agent_task=None,
+                recurring_agent_task=None,
+                rules_updates=[],
+                thread_rules_updates=["Thread này ưu tiên checklist việc nhà."],
+                thread_prompt_update="Thread việc nhà: Gia là trợ lý sắp xếp công việc, ưu tiên checklist ngắn.",
+            )
+        ),
+        sender=FakeSender(),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 114,
+                "message": {
+                    "message_id": 26,
+                    "message_thread_id": 88,
+                    "text": "đổi prompt thread này thành chuyên gia việc nhà",
+                    "from": {"id": 999},
+                    "chat": {"id": -100123, "type": "supergroup"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    thread_key = "telegram:-100123:topic:88"
+    assert "checklist việc nhà" in store.read_thread_rules(thread_key)
+    assert "trợ lý sắp xếp công việc" in store.read_thread_prompt(thread_key)
+    assert "checklist việc nhà" not in store.read_rules()
 
 
 def test_telegram_webhook_rejects_invalid_secret(tmp_path) -> None:

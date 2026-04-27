@@ -123,6 +123,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="text is required")
         incoming = ZaloIncomingRequest(
             text=text,
+            source=str(payload.get("source") or "debug"),
             from_uid=str(payload.get("from_uid") or "debug-user"),
             conversation_id=str(payload.get("conversation_id") or "debug-conversation"),
             conversation_type="group" if payload.get("conversation_type") == "group" else "user",
@@ -161,6 +162,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "reminders": [item.model_dump() for item in request.app.state.store.list_reminders()],
             "recurring_tasks": [item.model_dump() for item in request.app.state.store.list_recurring_tasks()],
         }
+
+    @app.get("/api/threads")
+    async def threads(
+        request: Request,
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        return {"threads": request.app.state.store.list_threads()}
+
+    @app.get("/api/threads/{thread_key}")
+    async def thread_detail(
+        thread_key: str,
+        request: Request,
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        return request.app.state.store.thread_snapshot(thread_key)
+
+    @app.put("/api/threads/{thread_key}/prompt")
+    async def update_thread_prompt(
+        thread_key: str,
+        request: Request,
+        payload: dict = Body(...),
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        saved = request.app.state.store.set_thread_prompt(thread_key, str(payload.get("prompt") or ""))
+        if not saved:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="prompt is required.")
+        return {"ok": True, "thread": request.app.state.store.thread_snapshot(thread_key)}
+
+    @app.put("/api/threads/{thread_key}/rules")
+    async def update_thread_rules(
+        thread_key: str,
+        request: Request,
+        payload: dict = Body(...),
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        raw_rules = payload.get("rules") or payload.get("rule") or payload.get("text")
+        rules = raw_rules if isinstance(raw_rules, list) else [str(raw_rules or "")]
+        saved = request.app.state.store.append_thread_rules_updates(thread_key, [str(item) for item in rules])
+        return {"ok": True, "saved": saved, "thread": request.app.state.store.thread_snapshot(thread_key)}
 
     @app.post("/api/reminders/{reminder_id}/completion")
     async def update_reminder_completion(

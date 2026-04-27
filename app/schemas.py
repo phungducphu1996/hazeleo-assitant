@@ -14,6 +14,7 @@ TaskCompletionStatus = Literal["open", "done", "skipped", "canceled"]
 
 class ZaloIncomingRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=1000)
+    source: str = Field(default="zalo", max_length=50)
     from_uid: str | None = Field(default=None, max_length=255)
     conversation_id: str | None = Field(default=None, max_length=255)
     conversation_type: Literal["user", "group"] = "user"
@@ -40,6 +41,7 @@ class ZaloDeliveryResult(BaseModel):
 
 class ZaloIncomingResponse(BaseModel):
     reply: str
+    thread_key: str | None = None
     memory: "AgentMemoryUpdates"
     reminder: "ReminderDraft | None" = None
     repeating_reminder: "RepeatingReminderDraft | None" = None
@@ -57,6 +59,8 @@ class ZaloIncomingResponse(BaseModel):
     fridge_updates_saved: int = 0
     daily_meal_saved: bool = False
     rules_updates_saved: int = 0
+    thread_rules_updates_saved: int = 0
+    thread_prompt_saved: bool = False
     task_status_update: "TaskStatusUpdateDraft | None" = None
     task_status_updated: bool = False
     task_status_error: str | None = None
@@ -133,6 +137,8 @@ class AgentOutput(BaseModel):
     agent_task: AgentTaskDraft | None = None
     recurring_agent_task: RecurringAgentTaskDraft | None = None
     rules_updates: list[str] = Field(default_factory=list)
+    thread_rules_updates: list[str] = Field(default_factory=list)
+    thread_prompt_update: str | None = Field(default=None, max_length=2000)
     fridge_updates: list[FridgeItemUpdate] = Field(default_factory=list)
     daily_meal_update: DailyMealUpdate | None = None
     daily_meal_updates: list[DailyMealUpdate] = Field(default_factory=list, max_length=5)
@@ -149,6 +155,7 @@ class RecentMemoryEntry(BaseModel):
 class ConversationTurn(BaseModel):
     ts: str
     conversation_id: str | None = None
+    thread_key: str | None = None
     from_uid: str | None = None
     role: Literal["user", "assistant"] = "user"
     text: str
@@ -165,6 +172,7 @@ class ReminderRecord(BaseModel):
     conversation_id: str | None = None
     conversation_type: Literal["user", "group"] = "user"
     thread_id: str | None = None
+    thread_key: str | None = None
     status: Literal["pending", "sent", "failed"] = "pending"
     attempts: int = 0
     created_at: str
@@ -189,6 +197,7 @@ class RecurringAgentTaskRecord(BaseModel):
     conversation_id: str | None = None
     conversation_type: Literal["user", "group"] = "user"
     thread_id: str | None = None
+    thread_key: str | None = None
     status: Literal["active", "paused", "failed"] = "active"
     attempts: int = 0
     created_at: str
@@ -343,7 +352,16 @@ AGENT_OUTPUT_JSON_SCHEMA = {
         "rules_updates": {
             "type": "array",
             "items": {"type": "string"},
-            "description": "Durable assistant behavior rules requested by the user.",
+            "description": "Durable global assistant behavior rules requested by the user for every thread.",
+        },
+        "thread_rules_updates": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Durable behavior rules requested only for the current Telegram thread/topic.",
+        },
+        "thread_prompt_update": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "description": "Full replacement prompt/persona for the current Telegram thread/topic, or null.",
         },
         "fridge_updates": {
             "type": "array",
@@ -466,6 +484,8 @@ AGENT_OUTPUT_JSON_SCHEMA = {
         "agent_task",
         "recurring_agent_task",
         "rules_updates",
+        "thread_rules_updates",
+        "thread_prompt_update",
         "fridge_updates",
         "daily_meal_update",
         "daily_meal_updates",

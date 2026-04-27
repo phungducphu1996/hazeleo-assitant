@@ -204,6 +204,26 @@ def test_agent_output_accepts_rules_updates() -> None:
     assert parsed.rules_updates == ["Gia mở đầu câu trả lời bằng 'vâng anh chị' khi phù hợp."]
 
 
+def test_agent_output_accepts_thread_rules_and_prompt_update() -> None:
+    payload = {
+        "reply": "vâng anh chị, Gia chỉnh thread này rồi nha",
+        "memory": {"profile_updates": [], "recent_updates": []},
+        "reminder": None,
+        "agent_task": None,
+        "recurring_agent_task": None,
+        "rules_updates": [],
+        "thread_rules_updates": ["Thread này trả lời như chuyên gia dinh dưỡng mẹ bầu."],
+        "thread_prompt_update": "Chuyên gia ăn uống gia đình, ưu tiên mẹ bầu và HSD tủ lạnh.",
+        "fridge_updates": [],
+        "daily_meal_update": None,
+    }
+
+    parsed = AgentOutput.model_validate(payload)
+
+    assert parsed.thread_rules_updates == ["Thread này trả lời như chuyên gia dinh dưỡng mẹ bầu."]
+    assert parsed.thread_prompt_update == "Chuyên gia ăn uống gia đình, ưu tiên mẹ bầu và HSD tủ lạnh."
+
+
 def test_agent_output_accepts_task_status_update() -> None:
     payload = {
         "reply": "vâng anh chị, Gia đánh dấu xong rồi nha",
@@ -249,6 +269,7 @@ def test_old_reminder_record_defaults_completion_status() -> None:
     assert parsed.completed_at is None
     assert parsed.repeat_interval_minutes is None
     assert parsed.next_run_at is None
+    assert parsed.thread_key is None
 
 
 def test_extract_response_text_from_responses_payload() -> None:

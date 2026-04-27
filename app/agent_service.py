@@ -8,6 +8,7 @@ from app.config import Settings
 from app.openai_client import AgentModelError, OpenAIAgentClient
 from app.schemas import AgentMemoryUpdates, AgentOutput, AgentTaskDraft, DailyMealUpdate, RecurringAgentTaskDraft, RecurringAgentTaskRecord, ReminderDraft, ReminderRecord, RepeatingReminderDraft, TaskStatusUpdateDraft, ZaloIncomingRequest, ZaloIncomingResponse
 from app.storage import FileStore
+from app.thread_context import build_thread_key
 
 
 class MessageSender(Protocol):
@@ -42,27 +43,34 @@ class FamilyAssistantService:
 
     async def handle_incoming(self, payload: ZaloIncomingRequest, *, send_reply: bool = True) -> ZaloIncomingResponse:
         now = datetime.now(self.settings.timezone)
+        thread_key = _payload_thread_key(payload)
         agent_prompt = _read_agent_prompt(self.settings.agent_prompt_path)
         recent = self.store.list_recent()
         conversation_turns = [
             item.model_dump()
             for item in self.store.list_conversation_turns(
                 payload.conversation_id,
+                thread_key=thread_key,
                 limit=self.conversation_turn_context_limit,
             )
         ]
         profile = self.store.read_profile()
         rules_text = self.store.read_rules()
+        thread_prompt = self.store.read_thread_prompt(thread_key)
+        thread_rules = self.store.read_thread_rules(thread_key)
         fridge = [item.model_dump() for item in self.store.list_fridge_items()]
         fridge_warnings = self.store.fridge_warnings(now=now)
         daily_meals = [item.model_dump() for item in self.store.list_daily_meals()]
-        open_tasks = self._open_task_context(payload.conversation_id)
+        open_tasks = self._open_task_context(payload.conversation_id, thread_key)
 
         try:
             output = await self.model_client.run(
                 agent_prompt=agent_prompt,
                 profile=profile,
                 rules_text=rules_text,
+                thread_key=thread_key,
+                thread_prompt=thread_prompt,
+                thread_rules=thread_rules,
                 recent=recent,
                 conversation_turns=conversation_turns,
                 fridge=fridge,
@@ -85,9 +93,12 @@ class FamilyAssistantService:
 
         accepted_profile = self.store.append_profile_updates(output.memory.profile_updates)
         accepted_rules = self.store.append_rules_updates(output.rules_updates)
+        accepted_thread_rules = self.store.append_thread_rules_updates(thread_key, output.thread_rules_updates)
+        thread_prompt_saved = self.store.set_thread_prompt(thread_key, output.thread_prompt_update)
         self.store.append_conversation_turn(
             now=now,
             conversation_id=payload.conversation_id,
+            thread_key=thread_key,
             from_uid=payload.from_uid,
             role="user",
             text=payload.text,
@@ -104,7 +115,7 @@ class FamilyAssistantService:
         saved_reminder = False
         reminder_error = None
         if output.reminder is not None:
-            saved_reminder, reminder_error = self._try_save_reminder(output.reminder, payload, now)
+            saved_reminder, reminder_error = self._try_save_reminder(output.reminder, payload, now, thread_key)
 
         saved_repeating_reminder = False
         repeating_reminder_error = None
@@ -113,12 +124,13 @@ class FamilyAssistantService:
                 output.repeating_reminder,
                 payload,
                 now,
+                thread_key,
             )
 
         saved_agent_task = False
         agent_task_error = None
         if output.agent_task is not None:
-            saved_agent_task, agent_task_error = self._try_save_agent_task(output.agent_task, payload, now)
+            saved_agent_task, agent_task_error = self._try_save_agent_task(output.agent_task, payload, now, thread_key)
 
         saved_recurring_task = False
         recurring_task_error = None
@@ -127,6 +139,7 @@ class FamilyAssistantService:
                 output.recurring_agent_task,
                 payload,
                 now,
+                thread_key,
             )
 
         task_status_updated = False
@@ -136,9 +149,38 @@ class FamilyAssistantService:
                 output.task_status_update,
                 payload,
                 now,
+                thread_key,
             )
             if not task_status_updated and task_status_error == "task_not_found":
                 output.reply = "Anh chị muốn Gia đánh dấu việc nào ạ?"
+
+        output.reply = _guard_schedule_reply(
+            output.reply,
+            payload_text=payload.text,
+            has_schedule_output=any(
+                item is not None
+                for item in (
+                    output.reminder,
+                    output.repeating_reminder,
+                    output.agent_task,
+                    output.recurring_agent_task,
+                )
+            ),
+            saved_any_schedule=any(
+                (
+                    saved_reminder,
+                    saved_repeating_reminder,
+                    saved_agent_task,
+                    saved_recurring_task,
+                )
+            ),
+            errors=[
+                reminder_error,
+                repeating_reminder_error,
+                agent_task_error,
+                recurring_task_error,
+            ],
+        )
 
         delivery = None
         if send_reply and payload.conversation_id:
@@ -151,6 +193,7 @@ class FamilyAssistantService:
         self.store.append_conversation_turn(
             now=now,
             conversation_id=payload.conversation_id,
+            thread_key=thread_key,
             from_uid=None,
             role="assistant",
             text=output.reply,
@@ -158,6 +201,7 @@ class FamilyAssistantService:
 
         return ZaloIncomingResponse(
             reply=output.reply,
+            thread_key=thread_key,
             memory=AgentMemoryUpdates(
                 profile_updates=accepted_profile,
                 recent_updates=[item.text for item in accepted_recent],
@@ -178,6 +222,8 @@ class FamilyAssistantService:
             fridge_updates_saved=len(fridge_updates),
             daily_meal_saved=daily_meal_saved,
             rules_updates_saved=len(accepted_rules),
+            thread_rules_updates_saved=len(accepted_thread_rules),
+            thread_prompt_saved=thread_prompt_saved,
             task_status_update=output.task_status_update,
             task_status_updated=task_status_updated,
             task_status_error=task_status_error,
@@ -185,6 +231,12 @@ class FamilyAssistantService:
 
     async def run_agent_task(self, record: ReminderRecord | RecurringAgentTaskRecord):
         now = datetime.now(self.settings.timezone)
+        thread_key = getattr(record, "thread_key", None) or build_thread_key(
+            source="telegram",
+            conversation_id=record.conversation_id,
+            conversation_type=record.conversation_type,
+            thread_id=getattr(record, "thread_id", None),
+        )
         prompt = (record.prompt or getattr(record, "text", "")).strip()
         title = getattr(record, "title", None) or getattr(record, "text", "task hẹn giờ")
         is_recurring = isinstance(record, RecurringAgentTaskRecord)
@@ -200,6 +252,7 @@ class FamilyAssistantService:
         )
         payload = ZaloIncomingRequest(
             text=task_prompt,
+            source="telegram",
             from_uid="scheduled-agent-task",
             conversation_id=record.conversation_id,
             conversation_type=record.conversation_type,
@@ -214,18 +267,22 @@ class FamilyAssistantService:
                 agent_prompt=agent_prompt,
                 profile=profile,
                 rules_text=self.store.read_rules(),
+                thread_key=thread_key,
+                thread_prompt=self.store.read_thread_prompt(thread_key),
+                thread_rules=self.store.read_thread_rules(thread_key),
                 recent=recent,
                 conversation_turns=[
                     item.model_dump()
                     for item in self.store.list_conversation_turns(
                         record.conversation_id,
+                        thread_key=thread_key,
                         limit=self.conversation_turn_context_limit,
                     )
                 ],
                 fridge=[item.model_dump() for item in self.store.list_fridge_items()],
                 fridge_warnings=self.store.fridge_warnings(now=now),
                 daily_meals=[item.model_dump() for item in self.store.list_daily_meals()],
-                open_tasks=self._open_task_context(record.conversation_id),
+                open_tasks=self._open_task_context(record.conversation_id, thread_key),
                 payload=payload,
                 now=now,
             )
@@ -240,6 +297,8 @@ class FamilyAssistantService:
 
         self.store.append_profile_updates(output.memory.profile_updates)
         self.store.append_rules_updates(output.rules_updates)
+        self.store.append_thread_rules_updates(thread_key, output.thread_rules_updates)
+        self.store.set_thread_prompt(thread_key, output.thread_prompt_update)
         self.store.append_recent_updates(
             output.memory.recent_updates,
             now=now,
@@ -257,6 +316,12 @@ class FamilyAssistantService:
 
     async def render_static_reminder(self, record: ReminderRecord) -> str:
         now = datetime.now(self.settings.timezone)
+        thread_key = record.thread_key or build_thread_key(
+            source="telegram",
+            conversation_id=record.conversation_id,
+            conversation_type=record.conversation_type,
+            thread_id=record.thread_id,
+        )
         payload = ZaloIncomingRequest(
             text=(
                 "A simple reminder is due now. Write only the final reminder message to the user.\n"
@@ -264,6 +329,7 @@ class FamilyAssistantService:
                 "Do not create reminder, agent_task, or recurring_agent_task. Set all schedule fields to null.\n\n"
                 f"Reminder: {record.text}"
             ),
+            source="telegram",
             from_uid="scheduled-static-reminder",
             conversation_id=record.conversation_id,
             conversation_type=record.conversation_type,
@@ -274,18 +340,22 @@ class FamilyAssistantService:
                 agent_prompt=_read_agent_prompt(self.settings.agent_prompt_path),
                 profile=self.store.read_profile(),
                 rules_text=self.store.read_rules(),
+                thread_key=thread_key,
+                thread_prompt=self.store.read_thread_prompt(thread_key),
+                thread_rules=self.store.read_thread_rules(thread_key),
                 recent=self.store.list_recent(),
                 conversation_turns=[
                     item.model_dump()
                     for item in self.store.list_conversation_turns(
                         record.conversation_id,
+                        thread_key=thread_key,
                         limit=self.conversation_turn_context_limit,
                     )
                 ],
                 fridge=[item.model_dump() for item in self.store.list_fridge_items()],
                 fridge_warnings=self.store.fridge_warnings(now=now),
                 daily_meals=[item.model_dump() for item in self.store.list_daily_meals()],
-                open_tasks=self._open_task_context(record.conversation_id),
+                open_tasks=self._open_task_context(record.conversation_id, thread_key),
                 payload=payload,
                 now=now,
             )
@@ -299,6 +369,7 @@ class FamilyAssistantService:
         reminder: ReminderDraft,
         payload: ZaloIncomingRequest,
         now: datetime,
+        thread_key: str | None,
     ) -> tuple[bool, str | None]:
         try:
             reminder_time = _parse_agent_datetime(reminder.time, now)
@@ -315,6 +386,7 @@ class FamilyAssistantService:
             conversation_id=payload.conversation_id,
             conversation_type=payload.conversation_type,
             thread_id=payload.thread_id,
+            thread_key=thread_key,
         )
         return True, None
 
@@ -323,6 +395,7 @@ class FamilyAssistantService:
         recurring_task: RecurringAgentTaskDraft,
         payload: ZaloIncomingRequest,
         now: datetime,
+        thread_key: str | None,
     ) -> tuple[bool, str | None]:
         try:
             self.store.add_recurring_agent_task(
@@ -334,6 +407,7 @@ class FamilyAssistantService:
                 conversation_id=payload.conversation_id,
                 conversation_type=payload.conversation_type,
                 thread_id=payload.thread_id,
+                thread_key=thread_key,
             )
         except ValueError:
             return False, "invalid_recurring_agent_task"
@@ -344,6 +418,7 @@ class FamilyAssistantService:
         repeating_reminder: RepeatingReminderDraft,
         payload: ZaloIncomingRequest,
         now: datetime,
+        thread_key: str | None,
     ) -> tuple[bool, str | None]:
         try:
             first_run_at = _parse_agent_datetime(repeating_reminder.time, now)
@@ -361,6 +436,7 @@ class FamilyAssistantService:
             conversation_id=payload.conversation_id,
             conversation_type=payload.conversation_type,
             thread_id=payload.thread_id,
+            thread_key=thread_key,
         )
         return True, None
 
@@ -369,6 +445,7 @@ class FamilyAssistantService:
         agent_task: AgentTaskDraft,
         payload: ZaloIncomingRequest,
         now: datetime,
+        thread_key: str | None,
     ) -> tuple[bool, str | None]:
         try:
             run_at = _parse_agent_datetime(agent_task.time, now)
@@ -386,6 +463,7 @@ class FamilyAssistantService:
             conversation_id=payload.conversation_id,
             conversation_type=payload.conversation_type,
             thread_id=payload.thread_id,
+            thread_key=thread_key,
         )
         return True, None
 
@@ -400,6 +478,7 @@ class FamilyAssistantService:
         status_update: TaskStatusUpdateDraft,
         payload: ZaloIncomingRequest,
         now: datetime,
+        thread_key: str | None,
     ) -> tuple[bool, str | None]:
         updated = self.store.complete_matching_reminder(
             conversation_id=payload.conversation_id,
@@ -408,6 +487,7 @@ class FamilyAssistantService:
             now=now,
             completed_by=payload.from_uid,
             note=status_update.note,
+            thread_key=thread_key,
         )
         if updated is not None:
             return True, None
@@ -418,12 +498,13 @@ class FamilyAssistantService:
             completion_status=status_update.completion_status,
             now=now,
             note=status_update.note,
+            thread_key=thread_key,
         )
         if recurring_updated is not None:
             return True, None
         return False, "task_not_found"
 
-    def _open_task_context(self, conversation_id: str | None) -> list[dict[str, object]]:
+    def _open_task_context(self, conversation_id: str | None, thread_key: str | None) -> list[dict[str, object]]:
         if not conversation_id:
             return []
         reminders = [
@@ -433,6 +514,8 @@ class FamilyAssistantService:
                 "text": record.text,
                 "prompt": record.prompt,
                 "time": record.time,
+                "thread_key": record.thread_key,
+                "same_thread": bool(thread_key and record.thread_key == thread_key),
                 "status": record.status,
                 "completion_status": record.completion_status,
                 "sent_at": record.sent_at,
@@ -449,6 +532,8 @@ class FamilyAssistantService:
                 "text": task.title,
                 "prompt": task.prompt,
                 "time": task.time,
+                "thread_key": task.thread_key,
+                "same_thread": bool(thread_key and task.thread_key == thread_key),
                 "status": task.status,
                 "completion_status": task.last_completion_status,
                 "last_run_at": task.last_run_at,
@@ -466,6 +551,100 @@ def _read_agent_prompt(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except OSError:
         return "You are a short, warm Vietnamese family assistant. Return valid JSON only."
+
+
+_SCHEDULE_INTENT_KEYWORDS = (
+    "nhac",
+    "reminder",
+    "remind",
+    "hẹn",
+    "lịch",
+    "lich",
+    "task",
+    "việc",
+    "viec",
+    "mỗi ngày",
+    "moi ngay",
+    "hằng ngày",
+    "hang ngay",
+    "cứ mỗi",
+    "cu moi",
+)
+
+_SAVED_CLAIM_KEYWORDS = (
+    "da luu",
+    "da dat",
+    "dat roi",
+    "da them",
+    "them roi",
+    "da tao",
+    "tao roi",
+    "gia da luu",
+    "gia dat",
+    "ok ",
+    "oke",
+)
+
+
+def _guard_schedule_reply(
+    reply: str,
+    *,
+    payload_text: str,
+    has_schedule_output: bool,
+    saved_any_schedule: bool,
+    errors: list[str | None],
+) -> str:
+    if saved_any_schedule:
+        return reply
+    if not _looks_like_schedule_intent(payload_text):
+        return reply
+    if not has_schedule_output and not _claims_schedule_saved(reply):
+        return reply
+
+    error = next((item for item in errors if item), None)
+    if error:
+        return _schedule_error_reply(error)
+    return (
+        "Gia chưa lưu được lịch nhắc/task này nha. "
+        "Anh chị nhắn lại rõ nội dung và thời gian giúp Gia với."
+    )
+
+
+def _looks_like_schedule_intent(text: str) -> bool:
+    normalized = _normalize_vietnamese(text)
+    return any(keyword in normalized for keyword in _SCHEDULE_INTENT_KEYWORDS)
+
+
+def _claims_schedule_saved(text: str) -> bool:
+    normalized = _normalize_vietnamese(text)
+    return any(keyword in normalized for keyword in _SAVED_CLAIM_KEYWORDS)
+
+
+def _schedule_error_reply(error: str) -> str:
+    if "not_future" in error:
+        return "Gia chưa lưu được vì thời gian này đã qua rồi nha. Anh chị gửi lại giờ mới giúp Gia với."
+    if "invalid" in error:
+        return "Gia chưa lưu được vì thời gian chưa rõ/hợp lệ nha. Anh chị nói lại giờ cụ thể giúp Gia với."
+    return "Gia chưa lưu được lịch nhắc/task này nha. Anh chị nói lại giúp Gia với."
+
+
+def _normalize_vietnamese(value: str) -> str:
+    import re
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", str(value or "").lower().replace("đ", "d"))
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _payload_thread_key(payload: ZaloIncomingRequest) -> str | None:
+    return build_thread_key(
+        source=payload.source,
+        conversation_id=payload.conversation_id,
+        conversation_type=payload.conversation_type,
+        thread_id=payload.thread_id,
+    )
 
 
 def _parse_agent_datetime(value: str, now: datetime) -> datetime:

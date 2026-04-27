@@ -21,6 +21,7 @@ def test_telegram_update_to_incoming_private_message() -> None:
     assert incoming is not None
     assert incoming.text == "Ngọc đang nghén"
     assert incoming.from_uid == "99"
+    assert incoming.source == "telegram"
     assert incoming.conversation_id == "123"
     assert incoming.conversation_type == "user"
 

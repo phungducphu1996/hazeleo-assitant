@@ -11,6 +11,7 @@ import unicodedata
 import uuid
 
 from app.schemas import ConversationTurn, DailyMealRecord, DailyMealSlotRecord, DailyMealUpdate, FridgeItemRecord, FridgeItemUpdate, RecentMemoryEntry, RecurringAgentTaskRecord, ReminderRecord, TaskCompletionStatus
+from app.thread_context import thread_dir_name
 
 
 class FileStore:
@@ -26,6 +27,7 @@ class FileStore:
         self.rules_path = data_dir / "rules.md"
         self.recent_path = data_dir / "recent.json"
         self.conversation_turns_path = data_dir / "conversation_turns.json"
+        self.threads_dir = data_dir / "threads"
         self.reminders_path = data_dir / "reminders.json"
         self.recurring_tasks_path = data_dir / "recurring_tasks.json"
         self.fridge_path = data_dir / "fridge.json"
@@ -36,6 +38,7 @@ class FileStore:
 
     def ensure_files(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        self.threads_dir.mkdir(parents=True, exist_ok=True)
         if not self.profile_path.exists():
             self._atomic_write_text_unlocked(self.profile_path, "# Profile Memory\n")
         if not self.rules_path.exists():
@@ -63,23 +66,61 @@ class FileStore:
         with self._locked():
             return self.rules_path.read_text(encoding="utf-8")
 
+    def read_thread_prompt(self, thread_key: str | None) -> str:
+        if not thread_key:
+            return ""
+        self.ensure_files()
+        with self._locked():
+            paths = self._ensure_thread_files_unlocked(thread_key)
+            return paths["prompt"].read_text(encoding="utf-8")
+
+    def read_thread_rules(self, thread_key: str | None) -> str:
+        if not thread_key:
+            return ""
+        self.ensure_files()
+        with self._locked():
+            paths = self._ensure_thread_files_unlocked(thread_key)
+            return paths["rules"].read_text(encoding="utf-8")
+
     def list_recent(self) -> list[RecentMemoryEntry]:
         self.ensure_files()
         with self._locked():
             return self._read_recent_unlocked()
 
-    def list_conversation_turns(self, conversation_id: str | None, *, limit: int = 30) -> list[ConversationTurn]:
+    def list_conversation_turns(
+        self,
+        conversation_id: str | None,
+        *,
+        thread_key: str | None = None,
+        limit: int = 30,
+    ) -> list[ConversationTurn]:
         self.ensure_files()
-        if not conversation_id:
+        if not conversation_id and not thread_key:
             return []
         with self._locked():
-            turns = self._prune_and_persist_conversation_turns_unlocked()
-            turns = [
-                turn
-                for turn in turns
-                if turn.conversation_id == conversation_id
-            ]
+            if thread_key:
+                turns = self._prune_and_persist_thread_conversation_turns_unlocked(thread_key)
+                if not turns and conversation_id:
+                    global_turns = self._prune_and_persist_conversation_turns_unlocked()
+                    turns = [
+                        turn
+                        for turn in global_turns
+                        if turn.conversation_id == conversation_id
+                        and (turn.thread_key is None or turn.thread_key == thread_key)
+                    ]
+            else:
+                turns = self._prune_and_persist_conversation_turns_unlocked()
+                turns = [
+                    turn
+                    for turn in turns
+                    if turn.conversation_id == conversation_id
+                ]
             return turns[-limit:]
+
+    def list_threads(self) -> list[dict[str, object]]:
+        self.ensure_files()
+        with self._locked():
+            return self._list_threads_unlocked()
 
     def list_reminders(self) -> list[ReminderRecord]:
         self.ensure_files()
@@ -118,6 +159,21 @@ class FileStore:
                 "fridge": [item.model_dump() for item in self._read_fridge_unlocked()],
                 "fridge_warnings": _build_fridge_warnings(self._read_fridge_unlocked(), now=datetime.now().astimezone()),
                 "daily_meals": [item.model_dump() for item in self._read_daily_meals_unlocked()],
+                "threads": self._list_threads_unlocked(),
+            }
+
+    def thread_snapshot(self, thread_key: str) -> dict[str, object]:
+        self.ensure_files()
+        with self._locked():
+            paths = self._ensure_thread_files_unlocked(thread_key)
+            turns = self._prune_and_persist_thread_conversation_turns_unlocked(thread_key)
+            return {
+                "thread_key": thread_key,
+                "dir_name": paths["dir"].name,
+                "prompt": paths["prompt"].read_text(encoding="utf-8"),
+                "rules": paths["rules"].read_text(encoding="utf-8"),
+                "settings": self._read_json_object_unlocked(paths["settings"]),
+                "conversation_turns": [entry.model_dump() for entry in turns[-30:]],
             }
 
     def append_profile_updates(self, updates: list[str]) -> list[str]:
@@ -125,6 +181,24 @@ class FileStore:
 
     def append_rules_updates(self, updates: list[str]) -> list[str]:
         return self._append_markdown_updates(self.rules_path, updates)
+
+    def append_thread_rules_updates(self, thread_key: str | None, updates: list[str]) -> list[str]:
+        if not thread_key:
+            return []
+        self.ensure_files()
+        with self._locked():
+            paths = self._ensure_thread_files_unlocked(thread_key)
+        return self._append_markdown_updates(paths["rules"], updates)
+
+    def set_thread_prompt(self, thread_key: str | None, prompt: str | None) -> bool:
+        clean_prompt = _clean_multiline(prompt or "")
+        if not thread_key or not clean_prompt:
+            return False
+        self.ensure_files()
+        with self._locked():
+            paths = self._ensure_thread_files_unlocked(thread_key)
+            self._atomic_write_text_unlocked(paths["prompt"], "# Thread Prompt\n\n" + clean_prompt + "\n")
+            return True
 
     def _append_markdown_updates(self, path: Path, updates: list[str]) -> list[str]:
         cleaned = [_clean_update(item) for item in updates]
@@ -188,6 +262,7 @@ class FileStore:
         from_uid: str | None,
         role: str,
         text: str,
+        thread_key: str | None = None,
     ) -> ConversationTurn | None:
         clean_text = _clean_update(text)
         if not clean_text or role not in {"user", "assistant"}:
@@ -196,6 +271,7 @@ class FileStore:
         turn = ConversationTurn(
             ts=now.isoformat(),
             conversation_id=conversation_id,
+            thread_key=thread_key,
             from_uid=from_uid,
             role=role,
             text=clean_text,
@@ -209,6 +285,16 @@ class FileStore:
                 retention_days=self.conversation_turn_retention_days,
             )
             self._atomic_write_json_unlocked(self.conversation_turns_path, [item.model_dump() for item in turns])
+            if thread_key:
+                paths = self._ensure_thread_files_unlocked(thread_key)
+                thread_turns = self._read_thread_conversation_turns_unlocked(thread_key)
+                thread_turns.append(turn)
+                thread_turns = _prune_conversation_turns(
+                    thread_turns,
+                    now=now,
+                    retention_days=self.conversation_turn_retention_days,
+                )
+                self._atomic_write_json_unlocked(paths["conversation_turns"], [item.model_dump() for item in thread_turns])
             return turn
 
     def apply_fridge_updates(self, updates: list[FridgeItemUpdate], *, now: datetime) -> list[FridgeItemRecord]:
@@ -296,6 +382,7 @@ class FileStore:
         conversation_id: str | None,
         conversation_type: str,
         thread_id: str | None = None,
+        thread_key: str | None = None,
     ) -> ReminderRecord:
         self.ensure_files()
         record = ReminderRecord(
@@ -306,6 +393,7 @@ class FileStore:
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
             thread_id=thread_id,
+            thread_key=thread_key,
             created_at=now.isoformat(),
         )
         with self._locked():
@@ -324,6 +412,7 @@ class FileStore:
         conversation_id: str | None,
         conversation_type: str,
         thread_id: str | None = None,
+        thread_key: str | None = None,
     ) -> ReminderRecord:
         self.ensure_files()
         record = ReminderRecord(
@@ -335,6 +424,7 @@ class FileStore:
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
             thread_id=thread_id,
+            thread_key=thread_key,
             created_at=now.isoformat(),
         )
         with self._locked():
@@ -353,6 +443,7 @@ class FileStore:
         conversation_id: str | None,
         conversation_type: str,
         thread_id: str | None = None,
+        thread_key: str | None = None,
     ) -> ReminderRecord:
         self.ensure_files()
         record = ReminderRecord(
@@ -365,6 +456,7 @@ class FileStore:
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
             thread_id=thread_id,
+            thread_key=thread_key,
             created_at=now.isoformat(),
         )
         with self._locked():
@@ -384,6 +476,7 @@ class FileStore:
         conversation_id: str | None,
         conversation_type: str,
         thread_id: str | None = None,
+        thread_key: str | None = None,
     ) -> RecurringAgentTaskRecord:
         self.ensure_files()
         next_run_at = compute_next_daily_run(local_time=local_time, now=now)
@@ -397,6 +490,7 @@ class FileStore:
             conversation_id=conversation_id,
             conversation_type="group" if conversation_type == "group" else "user",
             thread_id=thread_id,
+            thread_key=thread_key,
             created_at=now.isoformat(),
             next_run_at=next_run_at.isoformat(),
         )
@@ -449,6 +543,7 @@ class FileStore:
         now: datetime,
         completed_by: str | None,
         note: str | None,
+        thread_key: str | None = None,
     ) -> ReminderRecord | None:
         self.ensure_files()
         with self._locked():
@@ -456,6 +551,7 @@ class FileStore:
             match = _find_matching_reminder(
                 reminders,
                 conversation_id=conversation_id,
+                thread_key=thread_key,
                 target_text=target_text,
                 completion_status=completion_status,
                 now=now,
@@ -530,6 +626,7 @@ class FileStore:
         completion_status: TaskCompletionStatus,
         now: datetime,
         note: str | None,
+        thread_key: str | None = None,
     ) -> RecurringAgentTaskRecord | None:
         self.ensure_files()
         with self._locked():
@@ -537,6 +634,7 @@ class FileStore:
             match = _find_matching_recurring_task(
                 tasks,
                 conversation_id=conversation_id,
+                thread_key=thread_key,
                 target_text=target_text,
             )
             if match is None:
@@ -559,6 +657,55 @@ class FileStore:
             self._atomic_write_json_unlocked(self.recurring_tasks_path, [item.model_dump() for item in next_tasks])
             return updated_task
 
+    def _list_threads_unlocked(self) -> list[dict[str, object]]:
+        threads: list[dict[str, object]] = []
+        if not self.threads_dir.exists():
+            return threads
+        for path in sorted(self.threads_dir.iterdir()):
+            if not path.is_dir():
+                continue
+            settings = self._read_json_object_unlocked(path / "settings.json")
+            thread_key = str(settings.get("thread_key") or path.name)
+            turns = self._read_json_list_unlocked(path / "conversation_turns.json")
+            threads.append(
+                {
+                    "thread_key": thread_key,
+                    "dir_name": path.name,
+                    "conversation_turns_count": len(turns),
+                }
+            )
+        return threads
+
+    def _thread_paths_unlocked(self, thread_key: str) -> dict[str, Path]:
+        thread_dir = self.threads_dir / thread_dir_name(thread_key)
+        return {
+            "dir": thread_dir,
+            "prompt": thread_dir / "prompt.md",
+            "rules": thread_dir / "rules.md",
+            "conversation_turns": thread_dir / "conversation_turns.json",
+            "settings": thread_dir / "settings.json",
+        }
+
+    def _ensure_thread_files_unlocked(self, thread_key: str) -> dict[str, Path]:
+        paths = self._thread_paths_unlocked(thread_key)
+        paths["dir"].mkdir(parents=True, exist_ok=True)
+        if not paths["prompt"].exists():
+            self._atomic_write_text_unlocked(paths["prompt"], "# Thread Prompt\n")
+        if not paths["rules"].exists():
+            self._atomic_write_text_unlocked(paths["rules"], "# Thread Rules\n")
+        if not paths["conversation_turns"].exists():
+            self._atomic_write_text_unlocked(paths["conversation_turns"], "[]")
+        if not paths["settings"].exists():
+            self._atomic_write_json_unlocked(
+                paths["settings"],
+                {
+                    "thread_key": thread_key,
+                    "dir_name": paths["dir"].name,
+                    "created_at": datetime.now().astimezone().isoformat(),
+                },
+            )
+        return paths
+
     def _read_recent_unlocked(self) -> list[RecentMemoryEntry]:
         return [RecentMemoryEntry.model_validate(item) for item in self._read_json_list_unlocked(self.recent_path)]
 
@@ -566,6 +713,13 @@ class FileStore:
         return [
             ConversationTurn.model_validate(item)
             for item in self._read_json_list_unlocked(self.conversation_turns_path)
+        ]
+
+    def _read_thread_conversation_turns_unlocked(self, thread_key: str) -> list[ConversationTurn]:
+        paths = self._ensure_thread_files_unlocked(thread_key)
+        return [
+            ConversationTurn.model_validate(item)
+            for item in self._read_json_list_unlocked(paths["conversation_turns"])
         ]
 
     def _prune_and_persist_conversation_turns_unlocked(self) -> list[ConversationTurn]:
@@ -577,6 +731,18 @@ class FileStore:
         )
         if len(pruned) != len(turns):
             self._atomic_write_json_unlocked(self.conversation_turns_path, [item.model_dump() for item in pruned])
+        return pruned
+
+    def _prune_and_persist_thread_conversation_turns_unlocked(self, thread_key: str) -> list[ConversationTurn]:
+        paths = self._ensure_thread_files_unlocked(thread_key)
+        turns = self._read_thread_conversation_turns_unlocked(thread_key)
+        pruned = _prune_conversation_turns(
+            turns,
+            now=datetime.now().astimezone(),
+            retention_days=self.conversation_turn_retention_days,
+        )
+        if len(pruned) != len(turns):
+            self._atomic_write_json_unlocked(paths["conversation_turns"], [item.model_dump() for item in pruned])
         return pruned
 
     def _read_reminders_unlocked(self) -> list[ReminderRecord]:
@@ -607,6 +773,16 @@ class FileStore:
         except (OSError, json.JSONDecodeError):
             return []
 
+    def _read_json_object_unlocked(self, path: Path) -> dict[str, object]:
+        try:
+            raw = path.read_text(encoding="utf-8").strip()
+            if not raw:
+                return {}
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            return {}
+
     @contextmanager
     def _locked(self):
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -634,6 +810,11 @@ def _clean_update(value: str) -> str:
 def _clean_optional(value: str | None) -> str | None:
     cleaned = _clean_update(value or "")
     return cleaned or None
+
+
+def _clean_multiline(value: str) -> str:
+    lines = [_clean_update(line) for line in str(value or "").splitlines()]
+    return "\n".join(line for line in lines if line).strip()
 
 
 def _normalize_for_dedupe(value: str) -> str:
@@ -812,6 +993,7 @@ def _find_matching_reminder(
     reminders: list[ReminderRecord],
     *,
     conversation_id: str | None,
+    thread_key: str | None,
     target_text: str | None,
     completion_status: TaskCompletionStatus,
     now: datetime,
@@ -820,6 +1002,8 @@ def _find_matching_reminder(
     candidates: list[ReminderRecord] = []
     for record in reminders:
         if conversation_id and record.conversation_id != conversation_id:
+            continue
+        if thread_key and record.thread_key and record.thread_key != thread_key:
             continue
         if record.completion_status != "open":
             continue
@@ -843,12 +1027,15 @@ def _find_matching_recurring_task(
     tasks: list[RecurringAgentTaskRecord],
     *,
     conversation_id: str | None,
+    thread_key: str | None,
     target_text: str | None,
 ) -> RecurringAgentTaskRecord | None:
     target_key = _normalize_for_dedupe(target_text or "")
     candidates: list[RecurringAgentTaskRecord] = []
     for task in tasks:
         if conversation_id and task.conversation_id != conversation_id:
+            continue
+        if thread_key and task.thread_key and task.thread_key != thread_key:
             continue
         if task.status != "active":
             continue

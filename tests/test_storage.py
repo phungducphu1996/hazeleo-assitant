@@ -5,6 +5,19 @@ from zoneinfo import ZoneInfo
 
 from app.schemas import DailyMealUpdate, FridgeItemUpdate
 from app.storage import FileStore, compute_next_daily_run
+from app.thread_context import build_thread_key, thread_dir_name
+
+
+def test_thread_key_and_dir_name_are_stable() -> None:
+    key = build_thread_key(
+        source="telegram",
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+    )
+
+    assert key == "telegram:-100123:topic:77"
+    assert thread_dir_name(key) == "telegram_-100123_topic_77"
 
 
 def test_profile_updates_are_deduplicated(tmp_path) -> None:
@@ -27,6 +40,39 @@ def test_rules_updates_are_deduplicated(tmp_path) -> None:
     assert first == ["Gia mở đầu bằng vâng anh chị"]
     assert second == []
     assert "Gia mở đầu bằng vâng anh chị" in store.read_rules()
+
+
+def test_thread_prompt_rules_and_conversation_are_isolated(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    food_key = "telegram:-100123:topic:77"
+    chores_key = "telegram:-100123:topic:88"
+
+    assert store.set_thread_prompt(food_key, "Chuyên gia ăn uống gia đình") is True
+    saved_rules = store.append_thread_rules_updates(food_key, ["Ưu tiên dinh dưỡng cho Ngọc"])
+    store.append_conversation_turn(
+        now=now,
+        conversation_id="-100123",
+        thread_key=food_key,
+        from_uid="user-1",
+        role="user",
+        text="thread ăn uống",
+    )
+    store.append_conversation_turn(
+        now=now + timedelta(minutes=1),
+        conversation_id="-100123",
+        thread_key=chores_key,
+        from_uid="user-1",
+        role="user",
+        text="thread việc nhà",
+    )
+
+    assert saved_rules == ["Ưu tiên dinh dưỡng cho Ngọc"]
+    assert "Chuyên gia ăn uống" in store.read_thread_prompt(food_key)
+    assert "Ưu tiên dinh dưỡng" in store.read_thread_rules(food_key)
+    assert [turn.text for turn in store.list_conversation_turns("-100123", thread_key=food_key)] == ["thread ăn uống"]
+    assert [turn.text for turn in store.list_conversation_turns("-100123", thread_key=chores_key)] == ["thread việc nhà"]
+    assert {item["thread_key"] for item in store.list_threads()} == {food_key, chores_key}
 
 
 def test_recent_updates_are_append_only(tmp_path) -> None:
@@ -57,6 +103,7 @@ def test_reminder_lifecycle_can_be_updated(tmp_path) -> None:
         conversation_id="conv-1",
         conversation_type="user",
         thread_id="topic-1",
+        thread_key="telegram:conv-1:private",
     )
 
     updated = store.update_reminder(record.id, status="sent", sent_at=(now + timedelta(minutes=1)).isoformat())
@@ -64,6 +111,7 @@ def test_reminder_lifecycle_can_be_updated(tmp_path) -> None:
     assert updated is not None
     assert updated.status == "sent"
     assert updated.thread_id == "topic-1"
+    assert updated.thread_key == "telegram:conv-1:private"
     assert store.list_reminders()[0].status == "sent"
 
 
@@ -79,12 +127,14 @@ def test_repeating_reminder_can_be_stored_and_due(tmp_path) -> None:
         conversation_id="-100123",
         conversation_type="group",
         thread_id="77",
+        thread_key="telegram:-100123:topic:77",
     )
 
     assert record.kind == "repeating_reminder"
     assert record.repeat_interval_minutes == 30
     assert record.next_run_at == (now + timedelta(minutes=10)).isoformat()
     assert record.thread_id == "77"
+    assert record.thread_key == "telegram:-100123:topic:77"
     assert store.due_pending_reminders(now=now + timedelta(minutes=9), max_attempts=5) == []
     due = store.due_pending_reminders(now=now + timedelta(minutes=10), max_attempts=5)
     assert [item.id for item in due] == [record.id]
@@ -167,6 +217,47 @@ def test_completion_does_not_cross_conversation(tmp_path) -> None:
 
     assert updated is None
     assert store.list_reminders()[0].completion_status == "open"
+
+
+def test_completion_does_not_cross_thread_key(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    food = store.add_reminder(
+        text="mua cá",
+        reminder_time=now - timedelta(minutes=2),
+        now=now - timedelta(hours=1),
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+        thread_key="telegram:-100123:topic:77",
+    )
+    chores = store.add_reminder(
+        text="gấp quần áo",
+        reminder_time=now - timedelta(minutes=1),
+        now=now - timedelta(hours=1),
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="88",
+        thread_key="telegram:-100123:topic:88",
+    )
+    store.update_reminder(food.id, status="sent", sent_at=(now - timedelta(minutes=2)).isoformat())
+    store.update_reminder(chores.id, status="sent", sent_at=(now - timedelta(minutes=1)).isoformat())
+
+    updated = store.complete_matching_reminder(
+        conversation_id="-100123",
+        target_text=None,
+        completion_status="done",
+        now=now,
+        completed_by="user-1",
+        note=None,
+        thread_key="telegram:-100123:topic:77",
+    )
+
+    records = {record.text: record for record in store.list_reminders()}
+    assert updated is not None
+    assert updated.text == "mua cá"
+    assert records["mua cá"].completion_status == "done"
+    assert records["gấp quần áo"].completion_status == "open"
 
 
 def test_pending_reminder_can_be_canceled_by_target_text(tmp_path) -> None:
