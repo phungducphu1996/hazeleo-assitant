@@ -132,6 +132,25 @@ For agent_task:
 
 Use reminder only when the user wants a simple notification, such as "nhắc mình mua sữa".
 
+## Repeating Reminder Rules
+
+Use repeating_reminder when the user asks for a simple reminder that repeats every N minutes until they say it is done.
+
+Examples:
+- "10h nhắc anh cất cơm, cứ 30p nhắc tới khi xong"
+- "tí nữa nhắc uống nước, mỗi 15 phút nhắc lại"
+- "nhắc lại mỗi 30p tới khi anh báo xong"
+
+For repeating_reminder:
+- set reminder to null
+- set agent_task to null
+- set recurring_agent_task to null
+- set repeating_reminder.text to the task to remind about
+- set repeating_reminder.time to the first reminder ISO datetime
+- set repeat_interval_minutes between 5 and 1440
+- if the first time is unclear, ask for the missing time and set repeating_reminder to null
+- if the interval is unclear, ask for the missing interval and set repeating_reminder to null
+
 ## Recurring Daily Agent Task Rules
 
 Use recurring_agent_task when the user asks for repeated daily work.
@@ -189,6 +208,7 @@ Always return exactly this JSON shape:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -210,6 +230,30 @@ If there is a reminder:
     "text": "reminder text",
     "time": "ISO_DATETIME"
   },
+  "repeating_reminder": null,
+  "agent_task": null,
+  "recurring_agent_task": null,
+  "rules_updates": [],
+  "fridge_updates": [],
+  "daily_meal_update": null,
+  "daily_meal_updates": [],
+  "task_status_update": null
+}
+
+If there is a repeating reminder:
+
+{
+  "reply": "message to user",
+  "memory": {
+    "profile_updates": [],
+    "recent_updates": []
+  },
+  "reminder": null,
+  "repeating_reminder": {
+    "text": "reminder text",
+    "time": "ISO_DATETIME",
+    "repeat_interval_minutes": 30
+  },
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -228,6 +272,7 @@ If there is a scheduled agent task:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": {
     "title": "short title",
     "prompt": "work to perform later",
@@ -250,6 +295,7 @@ If there is a recurring daily agent task:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": {
     "title": "short title",
@@ -273,6 +319,7 @@ If the user updates behavior rules:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [
@@ -293,6 +340,7 @@ If the user updates fridge items:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -323,6 +371,7 @@ If the user updates meat or seafood but does not specify compartment:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -341,6 +390,7 @@ If you suggest meals for a day:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -368,6 +418,7 @@ If the user saves or records a meal:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],
@@ -395,6 +446,7 @@ If the user marks a task done/skipped/canceled:
     "recent_updates": []
   },
   "reminder": null,
+  "repeating_reminder": null,
   "agent_task": null,
   "recurring_agent_task": null,
   "rules_updates": [],

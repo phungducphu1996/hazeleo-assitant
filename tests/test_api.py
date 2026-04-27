@@ -366,6 +366,59 @@ def test_telegram_webhook_saves_agent_task(tmp_path) -> None:
     assert records[0].prompt == "Cho mình 3 việc quan trọng nhất ngày mai"
 
 
+def test_telegram_webhook_saves_repeating_reminder(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    future = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(hours=1)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="ok tới giờ Gia nhắc, rồi cứ 30p nhắc lại tới khi anh báo xong nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                repeating_reminder={
+                    "text": "cất cơm vào tủ lạnh",
+                    "time": future.isoformat(),
+                    "repeat_interval_minutes": 30,
+                },
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 112,
+                "message": {
+                    "message_id": 24,
+                    "message_thread_id": 77,
+                    "text": "10h nhắc anh cất cơm, cứ 30p nhắc tới khi xong",
+                    "from": {"id": 999},
+                    "chat": {"id": -100123, "type": "supergroup"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["processed"] is True
+    records = store.list_reminders()
+    assert records[0].kind == "repeating_reminder"
+    assert records[0].text == "cất cơm vào tủ lạnh"
+    assert records[0].repeat_interval_minutes == 30
+    assert records[0].next_run_at == future.isoformat()
+    assert records[0].thread_id == "77"
+
+
 def test_telegram_webhook_saves_recurring_agent_task(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)

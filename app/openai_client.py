@@ -57,6 +57,7 @@ class OpenAIAgentClient:
                 "Do not invent memory facts or fridge items.",
                 "Use fridge_updates for current ingredient changes.",
                 "Use fridge_warnings when answering HSD, fridge-check, or meal suggestion requests.",
+                "Use repeating_reminder for reminders that repeat every N minutes until the user marks them done/canceled.",
                 "Use daily_meal_updates when suggesting, selecting, saving, or recording meals for a date.",
                 "Use daily_meal_updates[].actual_items for foods actually eaten, cooked, or explicitly saved.",
                 "Use task_status_update when the user says a reminder/task is done, skipped, or canceled.",

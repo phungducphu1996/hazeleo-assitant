@@ -343,6 +343,36 @@ class FileStore:
             self._atomic_write_json_unlocked(self.reminders_path, [item.model_dump() for item in reminders])
             return record
 
+    def add_repeating_reminder(
+        self,
+        *,
+        text: str,
+        first_run_at: datetime,
+        repeat_interval_minutes: int,
+        now: datetime,
+        conversation_id: str | None,
+        conversation_type: str,
+        thread_id: str | None = None,
+    ) -> ReminderRecord:
+        self.ensure_files()
+        record = ReminderRecord(
+            id=str(uuid.uuid4()),
+            kind="repeating_reminder",
+            text=text.strip(),
+            time=first_run_at.isoformat(),
+            repeat_interval_minutes=max(5, min(1440, repeat_interval_minutes)),
+            next_run_at=first_run_at.isoformat(),
+            conversation_id=conversation_id,
+            conversation_type="group" if conversation_type == "group" else "user",
+            thread_id=thread_id,
+            created_at=now.isoformat(),
+        )
+        with self._locked():
+            reminders = self._read_reminders_unlocked()
+            reminders.append(record)
+            self._atomic_write_json_unlocked(self.reminders_path, [item.model_dump() for item in reminders])
+            return record
+
     def add_recurring_agent_task(
         self,
         *,
@@ -795,7 +825,11 @@ def _find_matching_reminder(
             continue
         if record.status == "failed":
             continue
-        if completion_status != "canceled" and record.status != "sent":
+        if (
+            completion_status != "canceled"
+            and record.status != "sent"
+            and not (record.kind == "repeating_reminder" and record.sent_at)
+        ):
             continue
         if target_key and not _record_matches_target(record, target_key):
             continue

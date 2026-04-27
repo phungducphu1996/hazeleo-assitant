@@ -42,11 +42,14 @@ class ZaloIncomingResponse(BaseModel):
     reply: str
     memory: "AgentMemoryUpdates"
     reminder: "ReminderDraft | None" = None
+    repeating_reminder: "RepeatingReminderDraft | None" = None
     agent_task: "AgentTaskDraft | None" = None
     recurring_agent_task: "RecurringAgentTaskDraft | None" = None
     delivery: ZaloDeliveryResult | None = None
     reminder_saved: bool = False
     reminder_error: str | None = None
+    repeating_reminder_saved: bool = False
+    repeating_reminder_error: str | None = None
     agent_task_saved: bool = False
     agent_task_error: str | None = None
     recurring_agent_task_saved: bool = False
@@ -74,6 +77,12 @@ class AgentMemoryUpdates(BaseModel):
 class ReminderDraft(BaseModel):
     text: str = Field(..., min_length=1, max_length=500)
     time: str = Field(..., min_length=1, max_length=80)
+
+
+class RepeatingReminderDraft(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+    time: str = Field(..., min_length=1, max_length=80)
+    repeat_interval_minutes: int = Field(..., ge=5, le=1440)
 
 
 class AgentTaskDraft(BaseModel):
@@ -120,6 +129,7 @@ class AgentOutput(BaseModel):
     reply: str = Field(..., min_length=1, max_length=2000)
     memory: AgentMemoryUpdates = Field(default_factory=AgentMemoryUpdates)
     reminder: ReminderDraft | None = None
+    repeating_reminder: RepeatingReminderDraft | None = None
     agent_task: AgentTaskDraft | None = None
     recurring_agent_task: RecurringAgentTaskDraft | None = None
     rules_updates: list[str] = Field(default_factory=list)
@@ -146,10 +156,12 @@ class ConversationTurn(BaseModel):
 
 class ReminderRecord(BaseModel):
     id: str
-    kind: Literal["reminder", "agent_task"] = "reminder"
+    kind: Literal["reminder", "agent_task", "repeating_reminder"] = "reminder"
     text: str
     prompt: str | None = None
     time: str
+    repeat_interval_minutes: int | None = None
+    next_run_at: str | None = None
     conversation_id: str | None = None
     conversation_type: Literal["user", "group"] = "user"
     thread_id: str | None = None
@@ -164,7 +176,7 @@ class ReminderRecord(BaseModel):
     last_error: str | None = None
 
     def due_at(self) -> datetime:
-        return datetime.fromisoformat(self.time)
+        return datetime.fromisoformat(self.next_run_at or self.time)
 
 
 class RecurringAgentTaskRecord(BaseModel):
@@ -257,6 +269,29 @@ AGENT_OUTPUT_JSON_SCHEMA = {
                         },
                     },
                     "required": ["text", "time"],
+                },
+            ]
+        },
+        "repeating_reminder": {
+            "anyOf": [
+                {"type": "null"},
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "text": {"type": "string"},
+                        "time": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "ISO datetime for the first reminder occurrence.",
+                        },
+                        "repeat_interval_minutes": {
+                            "type": "integer",
+                            "minimum": 5,
+                            "maximum": 1440,
+                        },
+                    },
+                    "required": ["text", "time", "repeat_interval_minutes"],
                 },
             ]
         },
@@ -427,6 +462,7 @@ AGENT_OUTPUT_JSON_SCHEMA = {
         "reply",
         "memory",
         "reminder",
+        "repeating_reminder",
         "agent_task",
         "recurring_agent_task",
         "rules_updates",

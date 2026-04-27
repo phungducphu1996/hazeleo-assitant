@@ -6,7 +6,7 @@ from typing import Protocol
 
 from app.config import Settings
 from app.openai_client import AgentModelError, OpenAIAgentClient
-from app.schemas import AgentMemoryUpdates, AgentOutput, AgentTaskDraft, DailyMealUpdate, RecurringAgentTaskDraft, RecurringAgentTaskRecord, ReminderDraft, ReminderRecord, TaskStatusUpdateDraft, ZaloIncomingRequest, ZaloIncomingResponse
+from app.schemas import AgentMemoryUpdates, AgentOutput, AgentTaskDraft, DailyMealUpdate, RecurringAgentTaskDraft, RecurringAgentTaskRecord, ReminderDraft, ReminderRecord, RepeatingReminderDraft, TaskStatusUpdateDraft, ZaloIncomingRequest, ZaloIncomingResponse
 from app.storage import FileStore
 
 
@@ -78,6 +78,7 @@ class FamilyAssistantService:
                 reply="Mình chưa gọi được AI lúc này, bạn thử lại xíu nha.",
                 memory=AgentMemoryUpdates(),
                 reminder=None,
+                repeating_reminder=None,
                 agent_task=None,
                 recurring_agent_task=None,
             )
@@ -104,6 +105,15 @@ class FamilyAssistantService:
         reminder_error = None
         if output.reminder is not None:
             saved_reminder, reminder_error = self._try_save_reminder(output.reminder, payload, now)
+
+        saved_repeating_reminder = False
+        repeating_reminder_error = None
+        if output.repeating_reminder is not None:
+            saved_repeating_reminder, repeating_reminder_error = self._try_save_repeating_reminder(
+                output.repeating_reminder,
+                payload,
+                now,
+            )
 
         saved_agent_task = False
         agent_task_error = None
@@ -153,11 +163,14 @@ class FamilyAssistantService:
                 recent_updates=[item.text for item in accepted_recent],
             ),
             reminder=output.reminder,
+            repeating_reminder=output.repeating_reminder,
             agent_task=output.agent_task,
             recurring_agent_task=output.recurring_agent_task,
             delivery=delivery,
             reminder_saved=saved_reminder,
             reminder_error=reminder_error,
+            repeating_reminder_saved=saved_repeating_reminder,
+            repeating_reminder_error=repeating_reminder_error,
             agent_task_saved=saved_agent_task,
             agent_task_error=agent_task_error,
             recurring_agent_task_saved=saved_recurring_task,
@@ -324,6 +337,31 @@ class FamilyAssistantService:
             )
         except ValueError:
             return False, "invalid_recurring_agent_task"
+        return True, None
+
+    def _try_save_repeating_reminder(
+        self,
+        repeating_reminder: RepeatingReminderDraft,
+        payload: ZaloIncomingRequest,
+        now: datetime,
+    ) -> tuple[bool, str | None]:
+        try:
+            first_run_at = _parse_agent_datetime(repeating_reminder.time, now)
+        except ValueError:
+            return False, "invalid_repeating_reminder_time"
+
+        if first_run_at <= now:
+            return False, "repeating_reminder_time_not_future"
+
+        self.store.add_repeating_reminder(
+            text=repeating_reminder.text,
+            first_run_at=first_run_at,
+            repeat_interval_minutes=repeating_reminder.repeat_interval_minutes,
+            now=now,
+            conversation_id=payload.conversation_id,
+            conversation_type=payload.conversation_type,
+            thread_id=payload.thread_id,
+        )
         return True, None
 
     def _try_save_agent_task(

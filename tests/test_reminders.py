@@ -105,6 +105,66 @@ def test_process_due_once_sends_reminder_to_thread(tmp_path) -> None:
     assert sender.sent_payloads[0]["thread_id"] == "77"
 
 
+def test_process_due_once_reschedules_repeating_reminder(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    store = FileStore(settings.data_dir)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    store.add_repeating_reminder(
+        text="cất cơm vào tủ lạnh",
+        first_run_at=now - timedelta(minutes=1),
+        repeat_interval_minutes=30,
+        now=now - timedelta(hours=1),
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+    )
+    sender = FakeSender(ok=True)
+    poller = ReminderPoller(settings=settings, store=store, sender=sender)
+
+    handled = asyncio.run(poller.process_due_once())
+
+    assert handled[0].kind == "repeating_reminder"
+    assert handled[0].status == "pending"
+    assert handled[0].attempts == 0
+    assert handled[0].next_run_at is not None
+    assert handled[0].due_at() > now
+    assert sender.sent == ["Nhắc nè: cất cơm vào tủ lạnh"]
+    assert sender.sent_payloads[0]["thread_id"] == "77"
+
+
+def test_process_due_once_repeats_until_done(tmp_path) -> None:
+    settings = _settings(tmp_path)
+    store = FileStore(settings.data_dir)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    record = store.add_repeating_reminder(
+        text="uống nước",
+        first_run_at=now - timedelta(minutes=1),
+        repeat_interval_minutes=5,
+        now=now - timedelta(hours=1),
+        conversation_id="conv-1",
+        conversation_type="user",
+    )
+    sender = FakeSender(ok=True)
+    poller = ReminderPoller(settings=settings, store=store, sender=sender)
+
+    first_handled = asyncio.run(poller.process_due_once())
+    store.update_reminder(first_handled[0].id, next_run_at=(now - timedelta(minutes=1)).isoformat())
+    second_handled = asyncio.run(poller.process_due_once())
+    store.update_reminder_completion(
+        record.id,
+        completion_status="done",
+        now=now,
+        completed_by="user-1",
+        note=None,
+    )
+    third_handled = asyncio.run(poller.process_due_once())
+
+    assert len(first_handled) == 1
+    assert len(second_handled) == 1
+    assert third_handled == []
+    assert sender.sent == ["Nhắc nè: uống nước", "Nhắc nè: uống nước"]
+
+
 def test_process_due_once_renders_static_reminder_with_agent(tmp_path) -> None:
     settings = _settings(tmp_path)
     store = FileStore(settings.data_dir)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Protocol
 
 from app.config import Settings
@@ -91,12 +91,23 @@ class ReminderPoller:
                     thread_id=record.thread_id,
                 )
             if delivery.ok:
-                updated = self.store.update_reminder(
-                    record.id,
-                    status="sent",
-                    sent_at=now.isoformat(),
-                    last_error=None,
-                )
+                if record.kind == "repeating_reminder":
+                    interval = max(5, min(1440, record.repeat_interval_minutes or 30))
+                    updated = self.store.update_reminder(
+                        record.id,
+                        status="pending",
+                        attempts=0,
+                        sent_at=now.isoformat(),
+                        next_run_at=(now + timedelta(minutes=interval)).isoformat(),
+                        last_error=None,
+                    )
+                else:
+                    updated = self.store.update_reminder(
+                        record.id,
+                        status="sent",
+                        sent_at=now.isoformat(),
+                        last_error=None,
+                    )
             else:
                 next_status = "failed" if attempts >= self.settings.reminder_max_attempts else "pending"
                 updated = self.store.update_reminder(

@@ -33,6 +33,25 @@ def test_agent_output_accepts_reminder() -> None:
     assert parsed.reminder.text == "mua sữa cho Ngọc"
 
 
+def test_agent_output_accepts_repeating_reminder() -> None:
+    payload = {
+        "reply": "ok 10h Gia nhắc, rồi cứ 30p nhắc lại tới khi anh báo xong nha",
+        "memory": {"profile_updates": [], "recent_updates": []},
+        "reminder": None,
+        "repeating_reminder": {
+            "text": "cất cơm vào tủ lạnh",
+            "time": "2026-04-23T22:00:00+07:00",
+            "repeat_interval_minutes": 30,
+        },
+    }
+
+    parsed = AgentOutput.model_validate(payload)
+
+    assert parsed.repeating_reminder is not None
+    assert parsed.repeating_reminder.text == "cất cơm vào tủ lạnh"
+    assert parsed.repeating_reminder.repeat_interval_minutes == 30
+
+
 def test_agent_output_accepts_agent_task() -> None:
     payload = {
         "reply": "ok 22h mình tổng hợp cho nha",
@@ -228,6 +247,8 @@ def test_old_reminder_record_defaults_completion_status() -> None:
 
     assert parsed.completion_status == "open"
     assert parsed.completed_at is None
+    assert parsed.repeat_interval_minutes is None
+    assert parsed.next_run_at is None
 
 
 def test_extract_response_text_from_responses_payload() -> None:

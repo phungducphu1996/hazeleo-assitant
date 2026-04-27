@@ -67,6 +67,56 @@ def test_reminder_lifecycle_can_be_updated(tmp_path) -> None:
     assert store.list_reminders()[0].status == "sent"
 
 
+def test_repeating_reminder_can_be_stored_and_due(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+
+    record = store.add_repeating_reminder(
+        text="cất cơm vào tủ lạnh",
+        first_run_at=now + timedelta(minutes=10),
+        repeat_interval_minutes=30,
+        now=now,
+        conversation_id="-100123",
+        conversation_type="group",
+        thread_id="77",
+    )
+
+    assert record.kind == "repeating_reminder"
+    assert record.repeat_interval_minutes == 30
+    assert record.next_run_at == (now + timedelta(minutes=10)).isoformat()
+    assert record.thread_id == "77"
+    assert store.due_pending_reminders(now=now + timedelta(minutes=9), max_attempts=5) == []
+    due = store.due_pending_reminders(now=now + timedelta(minutes=10), max_attempts=5)
+    assert [item.id for item in due] == [record.id]
+
+
+def test_repeating_reminder_completion_removes_it_from_due(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    record = store.add_repeating_reminder(
+        text="uống nước",
+        first_run_at=now - timedelta(minutes=1),
+        repeat_interval_minutes=15,
+        now=now - timedelta(hours=1),
+        conversation_id="conv-1",
+        conversation_type="user",
+    )
+    store.update_reminder(record.id, sent_at=now.isoformat(), next_run_at=(now - timedelta(minutes=1)).isoformat())
+
+    updated = store.complete_matching_reminder(
+        conversation_id="conv-1",
+        target_text=None,
+        completion_status="done",
+        now=now + timedelta(minutes=1),
+        completed_by="user-1",
+        note=None,
+    )
+
+    assert updated is not None
+    assert updated.completion_status == "done"
+    assert store.due_pending_reminders(now=now + timedelta(minutes=2), max_attempts=5) == []
+
+
 def test_sent_reminder_can_be_marked_done_by_recent_match(tmp_path) -> None:
     store = FileStore(tmp_path)
     now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
@@ -382,7 +432,7 @@ def test_daily_meal_actual_items_are_saved_without_losing_suggestions(tmp_path) 
 
 def test_conversation_turns_keep_five_day_history_on_disk(tmp_path) -> None:
     store = FileStore(tmp_path, conversation_turn_retention_days=5)
-    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
 
     store.append_conversation_turn(
         now=now - timedelta(days=6),
@@ -409,7 +459,7 @@ def test_conversation_turns_keep_five_day_history_on_disk(tmp_path) -> None:
 
 def test_conversation_turns_context_limit_is_applied_on_read(tmp_path) -> None:
     store = FileStore(tmp_path, conversation_turn_retention_days=5)
-    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
 
     for index in range(35):
         store.append_conversation_turn(
