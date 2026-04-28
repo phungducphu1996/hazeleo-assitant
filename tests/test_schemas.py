@@ -156,6 +156,42 @@ def test_agent_output_accepts_multiple_daily_meal_updates_with_actual_items() ->
     assert parsed.daily_meal_updates[1].suggestions == ["cá chiên", "đậu lăng hầm", "thịt heo xào"]
 
 
+def test_agent_output_accepts_food_place_updates() -> None:
+    payload = {
+        "reply": "Gia lưu quán A cho bữa trưa rồi nha",
+        "memory": {"profile_updates": [], "recent_updates": []},
+        "reminder": None,
+        "agent_task": None,
+        "recurring_agent_task": None,
+        "fridge_updates": [],
+        "food_place_updates": [
+            {
+                "name": "Quán A",
+                "place_type": "delivery",
+                "cuisine": "Vietnamese",
+                "meal_slots": ["lunch"],
+                "favorite_items": ["cơm gà"],
+                "avoid_items": [],
+                "health_notes": "Ngọc ăn ổn",
+                "delivery_apps": ["Grab"],
+                "address_note": None,
+                "distance_note": "gần nhà",
+                "price_note": "khoảng 80k",
+                "status": "active",
+                "event": "ordered",
+                "notes": "trưa nay đặt về",
+            }
+        ],
+        "daily_meal_update": None,
+    }
+
+    parsed = AgentOutput.model_validate(payload)
+
+    assert parsed.food_place_updates[0].name == "Quán A"
+    assert parsed.food_place_updates[0].event == "ordered"
+    assert parsed.food_place_updates[0].favorite_items == ["cơm gà"]
+
+
 def test_agent_output_accepts_fridge_hsd_fields() -> None:
     payload = {
         "reply": "Gia lưu cá hồi ngăn đông rồi nha",

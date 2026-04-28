@@ -150,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "fridge": [item.model_dump() for item in request.app.state.store.list_fridge_items()],
             "fridge_warnings": request.app.state.store.fridge_warnings(now=datetime.now(request.app.state.settings.timezone)),
             "daily_meals": [item.model_dump() for item in request.app.state.store.list_daily_meals()],
+            "food_places": [item.model_dump() for item in request.app.state.store.list_food_places()],
         }
 
     @app.get("/api/reminders")

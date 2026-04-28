@@ -10,7 +10,7 @@ import re
 import unicodedata
 import uuid
 
-from app.schemas import ConversationTurn, DailyMealRecord, DailyMealSlotRecord, DailyMealUpdate, FridgeItemRecord, FridgeItemUpdate, RecentMemoryEntry, RecurringAgentTaskRecord, ReminderRecord, TaskCompletionStatus
+from app.schemas import ConversationTurn, DailyMealRecord, DailyMealSlotRecord, DailyMealUpdate, FoodPlaceRecord, FoodPlaceUpdate, FridgeItemRecord, FridgeItemUpdate, RecentMemoryEntry, RecurringAgentTaskRecord, ReminderRecord, TaskCompletionStatus
 from app.thread_context import thread_dir_name
 
 
@@ -32,6 +32,7 @@ class FileStore:
         self.recurring_tasks_path = data_dir / "recurring_tasks.json"
         self.fridge_path = data_dir / "fridge.json"
         self.daily_meals_path = data_dir / "daily_meals.json"
+        self.food_places_path = data_dir / "food_places.json"
         self.lock_path = data_dir / ".store.lock"
         self.daily_meal_retention_days = daily_meal_retention_days
         self.conversation_turn_retention_days = conversation_turn_retention_days
@@ -55,6 +56,8 @@ class FileStore:
             self._atomic_write_text_unlocked(self.fridge_path, "[]")
         if not self.daily_meals_path.exists():
             self._atomic_write_text_unlocked(self.daily_meals_path, "[]")
+        if not self.food_places_path.exists():
+            self._atomic_write_text_unlocked(self.food_places_path, "[]")
 
     def read_profile(self) -> str:
         self.ensure_files()
@@ -147,6 +150,11 @@ class FileStore:
         with self._locked():
             return self._read_daily_meals_unlocked()
 
+    def list_food_places(self) -> list[FoodPlaceRecord]:
+        self.ensure_files()
+        with self._locked():
+            return self._read_food_places_unlocked()
+
     def snapshot(self) -> dict[str, object]:
         self.ensure_files()
         with self._locked():
@@ -159,6 +167,7 @@ class FileStore:
                 "fridge": [item.model_dump() for item in self._read_fridge_unlocked()],
                 "fridge_warnings": _build_fridge_warnings(self._read_fridge_unlocked(), now=datetime.now().astimezone()),
                 "daily_meals": [item.model_dump() for item in self._read_daily_meals_unlocked()],
+                "food_places": [item.model_dump() for item in self._read_food_places_unlocked()],
                 "threads": self._list_threads_unlocked(),
             }
 
@@ -372,6 +381,50 @@ class FileStore:
             )
             self._atomic_write_json_unlocked(self.daily_meals_path, [item.model_dump() for item in next_meals])
             return day
+
+    def apply_food_place_updates(self, updates: list[FoodPlaceUpdate], *, now: datetime) -> list[FoodPlaceRecord]:
+        if not updates:
+            return []
+        self.ensure_files()
+        with self._locked():
+            places = self._read_food_places_unlocked()
+            by_key = {_normalize_for_dedupe(place.name): place for place in places}
+            changed: list[FoodPlaceRecord] = []
+            for update in updates:
+                name = _clean_update(update.name)
+                key = _normalize_for_dedupe(name)
+                if not key:
+                    continue
+                existing = by_key.get(key)
+                created_at = existing.created_at if existing else now.isoformat()
+                event = update.event
+                record = FoodPlaceRecord(
+                    id=existing.id if existing else str(uuid.uuid4()),
+                    name=existing.name if existing else name,
+                    place_type=_resolve_food_place_type(update.place_type, existing),
+                    cuisine=update.cuisine if update.cuisine is not None else (existing.cuisine if existing else None),
+                    meal_slots=_merge_clean_lists(existing.meal_slots if existing else [], update.meal_slots),
+                    favorite_items=_merge_clean_lists(existing.favorite_items if existing else [], update.favorite_items),
+                    avoid_items=_merge_clean_lists(existing.avoid_items if existing else [], update.avoid_items),
+                    health_notes=_clean_optional(update.health_notes) or (existing.health_notes if existing else None),
+                    delivery_apps=_merge_clean_lists(existing.delivery_apps if existing else [], update.delivery_apps),
+                    address_note=_clean_optional(update.address_note) or (existing.address_note if existing else None),
+                    distance_note=_clean_optional(update.distance_note) or (existing.distance_note if existing else None),
+                    price_note=_clean_optional(update.price_note) or (existing.price_note if existing else None),
+                    status=_resolve_food_place_status(update.status, event, existing),
+                    last_ordered_at=now.isoformat() if event == "ordered" else (existing.last_ordered_at if existing else None),
+                    last_visited_at=now.isoformat() if event == "visited" else (existing.last_visited_at if existing else None),
+                    order_count=(existing.order_count if existing else 0) + (1 if event == "ordered" else 0),
+                    visit_count=(existing.visit_count if existing else 0) + (1 if event == "visited" else 0),
+                    notes=_clean_optional(update.notes) or (existing.notes if existing else None),
+                    created_at=created_at,
+                    updated_at=now.isoformat(),
+                )
+                by_key[key] = record
+                changed.append(record)
+            next_places = sorted(by_key.values(), key=lambda item: item.name.lower())
+            self._atomic_write_json_unlocked(self.food_places_path, [item.model_dump() for item in next_places])
+            return changed
 
     def add_reminder(
         self,
@@ -763,6 +816,12 @@ class FileStore:
             for item in self._read_json_list_unlocked(self.daily_meals_path)
         ]
 
+    def _read_food_places_unlocked(self) -> list[FoodPlaceRecord]:
+        return [
+            FoodPlaceRecord.model_validate(item)
+            for item in self._read_json_list_unlocked(self.food_places_path)
+        ]
+
     def _read_json_list_unlocked(self, path: Path) -> list[object]:
         try:
             raw = path.read_text(encoding="utf-8").strip()
@@ -817,6 +876,19 @@ def _clean_multiline(value: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
+def _merge_clean_lists(existing: list[str], updates: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for value in [*existing, *updates]:
+        cleaned = _clean_update(value)
+        key = _normalize_for_dedupe(cleaned)
+        if not cleaned or not key or key in seen:
+            continue
+        merged.append(cleaned)
+        seen.add(key)
+    return merged
+
+
 def _normalize_for_dedupe(value: str) -> str:
     text = unicodedata.normalize("NFKD", value.lower().replace("đ", "d"))
     text = "".join(char for char in text if not unicodedata.combining(char))
@@ -841,6 +913,26 @@ def _parse_optional_datetime(value: str | None, now: datetime) -> datetime | Non
     except ValueError:
         return None
     return _as_aware(parsed, now.tzinfo)
+
+
+def _resolve_food_place_type(place_type: str, existing: FoodPlaceRecord | None) -> str:
+    if place_type != "other":
+        return place_type
+    if existing is not None and existing.place_type != "other":
+        return existing.place_type
+    return place_type
+
+
+def _resolve_food_place_status(status: str, event: str, existing: FoodPlaceRecord | None) -> str:
+    if event == "disliked":
+        return "disliked"
+    if status != "unknown":
+        return status
+    if existing is not None and existing.status != "unknown":
+        return existing.status
+    if event in {"ordered", "visited", "mentioned", "updated"}:
+        return "active"
+    return "unknown"
 
 
 def _resolve_fridge_category(

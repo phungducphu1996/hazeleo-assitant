@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.agent_service import FamilyAssistantService
 from app.config import Settings
 from app.main import create_app
-from app.schemas import AgentMemoryUpdates, AgentOutput, FridgeItemUpdate, ZaloDeliveryResult
+from app.schemas import AgentMemoryUpdates, AgentOutput, FoodPlaceUpdate, FridgeItemUpdate, ZaloDeliveryResult
 from app.storage import FileStore
 from app.thread_context import build_thread_key
 
@@ -820,6 +820,132 @@ def test_telegram_webhook_saves_actual_lunch_and_dinner_suggestions(tmp_path) ->
     meals = store.list_daily_meals()[0].meals
     assert meals["lunch"].actual_items == ["canh cải cúc", "cải ngồng xào tỏi", "thịt heo luộc", "mắm đủ đủ tôm"]
     assert meals["dinner"].suggestions == ["thịt heo xào sả ớt", "cá chiên giòn", "đậu lăng hầm cà chua"]
+
+
+def test_telegram_webhook_saves_food_place_and_daily_meal(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="vâng anh chị, Gia lưu bữa trưa và quán A rồi nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                agent_task=None,
+                recurring_agent_task=None,
+                food_place_updates=[
+                    {
+                        "name": "Quán A",
+                        "place_type": "delivery",
+                        "cuisine": "Vietnamese",
+                        "meal_slots": ["lunch"],
+                        "favorite_items": ["cơm gà"],
+                        "avoid_items": [],
+                        "health_notes": "Ngọc ăn ổn",
+                        "delivery_apps": ["Grab"],
+                        "address_note": None,
+                        "distance_note": None,
+                        "price_note": None,
+                        "status": "active",
+                        "event": "ordered",
+                        "notes": "trưa nay đặt về",
+                    }
+                ],
+                daily_meal_updates=[
+                    {
+                        "date": "2026-04-25",
+                        "meal_slot": "lunch",
+                        "suggestions": [],
+                        "actual_items": ["cơm gà Quán A"],
+                        "selected": None,
+                        "notes": "đặt về, Ngọc ăn ổn",
+                    }
+                ],
+            )
+        ),
+        sender=FakeSender(),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 117,
+                "message": {
+                    "message_id": 29,
+                    "text": "trưa nay đặt cơm gà quán A, Ngọc ăn ổn",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    place = store.list_food_places()[0]
+    assert place.name == "Quán A"
+    assert place.order_count == 1
+    assert place.favorite_items == ["cơm gà"]
+    assert place.health_notes == "Ngọc ăn ổn"
+    assert store.list_daily_meals()[0].meals["lunch"].actual_items == ["cơm gà Quán A"]
+
+
+def test_food_places_are_sent_to_model_context(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    store.apply_food_place_updates(
+        [
+            FoodPlaceUpdate(
+                name="Quán A",
+                place_type="delivery",
+                cuisine="Vietnamese",
+                meal_slots=["lunch"],
+                favorite_items=["cơm gà"],
+                event="ordered",
+            )
+        ],
+        now=now,
+    )
+    model_client = FakeModelClient(
+        AgentOutput(
+            reply="Gia nhớ quán A để cân nhắc bữa trưa nha",
+            memory=AgentMemoryUpdates(),
+            reminder=None,
+        )
+    )
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=model_client,
+        sender=FakeSender(),
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 118,
+                "message": {
+                    "message_id": 30,
+                    "text": "trưa nay ăn ngoài gì được ta",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert model_client.calls[0]["food_places"][0]["name"] == "Quán A"
 
 
 def test_meat_without_compartment_is_not_saved_from_model_output(tmp_path) -> None:

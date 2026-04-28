@@ -10,6 +10,10 @@ FridgeCategory = Literal["vegetable", "fruit", "meat", "seafood", "egg", "dairy"
 FridgeCompartment = Literal["cool", "freezer"]
 FridgeExpirySource = Literal["explicit", "default", "unknown"]
 TaskCompletionStatus = Literal["open", "done", "skipped", "canceled"]
+FoodPlaceType = Literal["restaurant", "delivery", "cafe", "market", "other"]
+FoodPlaceCuisine = Literal["Vietnamese", "Japanese", "Korean", "Western", "Chinese", "Thai", "other"]
+FoodPlaceStatus = Literal["active", "disliked", "closed", "unknown"]
+FoodPlaceEvent = Literal["mentioned", "ordered", "visited", "disliked", "updated"]
 
 
 class ZaloIncomingRequest(BaseModel):
@@ -57,6 +61,7 @@ class ZaloIncomingResponse(BaseModel):
     recurring_agent_task_saved: bool = False
     recurring_agent_task_error: str | None = None
     fridge_updates_saved: int = 0
+    food_place_updates_saved: int = 0
     daily_meal_saved: bool = False
     rules_updates_saved: int = 0
     thread_rules_updates_saved: int = 0
@@ -123,6 +128,23 @@ class DailyMealUpdate(BaseModel):
     notes: str | None = Field(default=None, max_length=300)
 
 
+class FoodPlaceUpdate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    place_type: FoodPlaceType = "other"
+    cuisine: FoodPlaceCuisine | None = None
+    meal_slots: list[Literal["breakfast", "lunch", "dinner", "snack"]] = Field(default_factory=list, max_length=4)
+    favorite_items: list[str] = Field(default_factory=list, max_length=10)
+    avoid_items: list[str] = Field(default_factory=list, max_length=10)
+    health_notes: str | None = Field(default=None, max_length=300)
+    delivery_apps: list[str] = Field(default_factory=list, max_length=5)
+    address_note: str | None = Field(default=None, max_length=300)
+    distance_note: str | None = Field(default=None, max_length=120)
+    price_note: str | None = Field(default=None, max_length=120)
+    status: FoodPlaceStatus = "unknown"
+    event: FoodPlaceEvent = "mentioned"
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class TaskStatusUpdateDraft(BaseModel):
     target_text: str | None = Field(default=None, max_length=500)
     completion_status: TaskCompletionStatus
@@ -140,6 +162,7 @@ class AgentOutput(BaseModel):
     thread_rules_updates: list[str] = Field(default_factory=list)
     thread_prompt_update: str | None = Field(default=None, max_length=2000)
     fridge_updates: list[FridgeItemUpdate] = Field(default_factory=list)
+    food_place_updates: list[FoodPlaceUpdate] = Field(default_factory=list, max_length=5)
     daily_meal_update: DailyMealUpdate | None = None
     daily_meal_updates: list[DailyMealUpdate] = Field(default_factory=list, max_length=5)
     task_status_update: TaskStatusUpdateDraft | None = None
@@ -236,6 +259,29 @@ class DailyMealSlotRecord(BaseModel):
 class DailyMealRecord(BaseModel):
     date: str
     meals: dict[str, DailyMealSlotRecord] = Field(default_factory=dict)
+
+
+class FoodPlaceRecord(BaseModel):
+    id: str
+    name: str
+    place_type: FoodPlaceType = "other"
+    cuisine: FoodPlaceCuisine | None = None
+    meal_slots: list[str] = Field(default_factory=list)
+    favorite_items: list[str] = Field(default_factory=list)
+    avoid_items: list[str] = Field(default_factory=list)
+    health_notes: str | None = None
+    delivery_apps: list[str] = Field(default_factory=list)
+    address_note: str | None = None
+    distance_note: str | None = None
+    price_note: str | None = None
+    status: FoodPlaceStatus = "unknown"
+    last_ordered_at: str | None = None
+    last_visited_at: str | None = None
+    order_count: int = 0
+    visit_count: int = 0
+    notes: str | None = None
+    created_at: str
+    updated_at: str
 
 
 AGENT_OUTPUT_JSON_SCHEMA = {
@@ -401,6 +447,70 @@ AGENT_OUTPUT_JSON_SCHEMA = {
                 ],
             },
         },
+        "food_place_updates": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "name": {"type": "string"},
+                    "place_type": {
+                        "type": "string",
+                        "enum": ["restaurant", "delivery", "cafe", "market", "other"],
+                    },
+                    "cuisine": {
+                        "anyOf": [
+                            {"type": "string", "enum": ["Vietnamese", "Japanese", "Korean", "Western", "Chinese", "Thai", "other"]},
+                            {"type": "null"},
+                        ]
+                    },
+                    "meal_slots": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"]},
+                        "maxItems": 4,
+                    },
+                    "favorite_items": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 10,
+                    },
+                    "avoid_items": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 10,
+                    },
+                    "health_notes": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "delivery_apps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 5,
+                    },
+                    "address_note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "distance_note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "price_note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                    "status": {"type": "string", "enum": ["active", "disliked", "closed", "unknown"]},
+                    "event": {"type": "string", "enum": ["mentioned", "ordered", "visited", "disliked", "updated"]},
+                    "notes": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                },
+                "required": [
+                    "name",
+                    "place_type",
+                    "cuisine",
+                    "meal_slots",
+                    "favorite_items",
+                    "avoid_items",
+                    "health_notes",
+                    "delivery_apps",
+                    "address_note",
+                    "distance_note",
+                    "price_note",
+                    "status",
+                    "event",
+                    "notes",
+                ],
+            },
+            "maxItems": 5,
+        },
         "daily_meal_update": {
             "anyOf": [
                 {"type": "null"},
@@ -487,6 +597,7 @@ AGENT_OUTPUT_JSON_SCHEMA = {
         "thread_rules_updates",
         "thread_prompt_update",
         "fridge_updates",
+        "food_place_updates",
         "daily_meal_update",
         "daily_meal_updates",
         "task_status_update",

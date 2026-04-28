@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.schemas import DailyMealUpdate, FridgeItemUpdate
+from app.schemas import DailyMealUpdate, FoodPlaceUpdate, FridgeItemUpdate
 from app.storage import FileStore, compute_next_daily_run
 from app.thread_context import build_thread_key, thread_dir_name
 
@@ -519,6 +519,56 @@ def test_daily_meal_actual_items_are_saved_without_losing_suggestions(tmp_path) 
     assert slot.suggestions == ["trứng hấp thịt", "thịt kho trứng"]
     assert slot.actual_items == ["canh cải cúc", "cải ngồng xào tỏi", "thịt heo luộc"]
     assert slot.notes == "thực đơn trưa đã lưu"
+
+
+def test_food_place_updates_merge_and_track_events(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime(2026, 4, 25, 12, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+
+    first = store.apply_food_place_updates(
+        [
+            FoodPlaceUpdate(
+                name="Quán A",
+                place_type="delivery",
+                cuisine="Vietnamese",
+                meal_slots=["lunch"],
+                favorite_items=["cơm gà"],
+                health_notes="Ngọc ăn ổn",
+                delivery_apps=["Grab"],
+                status="active",
+                event="ordered",
+                notes="trưa nay đặt về",
+            )
+        ],
+        now=now,
+    )
+    second = store.apply_food_place_updates(
+        [
+            FoodPlaceUpdate(
+                name="quan a",
+                avoid_items=["quá cay"],
+                event="disliked",
+                status="disliked",
+            )
+        ],
+        now=now + timedelta(hours=1),
+    )
+
+    places = store.list_food_places()
+    assert len(first) == 1
+    assert len(second) == 1
+    assert len(places) == 1
+    assert places[0].name == "Quán A"
+    assert places[0].place_type == "delivery"
+    assert places[0].cuisine == "Vietnamese"
+    assert places[0].meal_slots == ["lunch"]
+    assert places[0].favorite_items == ["cơm gà"]
+    assert places[0].avoid_items == ["quá cay"]
+    assert places[0].delivery_apps == ["Grab"]
+    assert places[0].health_notes == "Ngọc ăn ổn"
+    assert places[0].status == "disliked"
+    assert places[0].order_count == 1
+    assert places[0].last_ordered_at == now.isoformat()
 
 
 def test_conversation_turns_keep_five_day_history_on_disk(tmp_path) -> None:

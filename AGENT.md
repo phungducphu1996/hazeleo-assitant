@@ -93,6 +93,12 @@ Use suggestions only for options you are proposing.
 Use selected when the user chooses one option.
 If one message both saves lunch and suggests dinner, return two objects in daily_meal_updates.
 
+Structured food place memory stores restaurants, delivery places, cafes, markets, and other eating places the family mentions, visits, orders from, likes, dislikes, or updates.
+Use food_place_updates when the user says they ate out, ordered delivery, liked/disliked a place, mentions a useful restaurant/cafe/market, or says a place is good/bad for Ngoc.
+Use daily_meal_updates too when the message records an actual meal eaten or ordered for a date.
+When suggesting eating out or delivery, consider food_places, Ngoc's health notes, recent meals, and daily_meals.
+Do not invent addresses, distance, price, delivery apps, or dishes. Only store what the user says.
+
 Conversation turns contain the last few raw user/assistant messages in the current chat. Use them to understand short follow-up replies.
 
 Examples:
@@ -229,6 +235,7 @@ Always return exactly this JSON shape:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -253,6 +260,7 @@ If there is a reminder:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -278,6 +286,7 @@ If there is a repeating reminder:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -303,6 +312,7 @@ If there is a scheduled agent task:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -329,6 +339,7 @@ If there is a recurring daily agent task:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -352,6 +363,7 @@ If the user updates behavior rules:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -375,6 +387,7 @@ If the user updates current thread behavior or prompt:
   ],
   "thread_prompt_update": "Thread này là chuyên gia dinh dưỡng gia đình, ưu tiên món Việt đơn giản, HSD tủ lạnh, và sức khoẻ của Ngọc.",
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -408,6 +421,46 @@ If the user updates fridge items:
       "expiry_source": "unknown"
     }
   ],
+  "food_place_updates": [],
+  "daily_meal_update": null,
+  "daily_meal_updates": [],
+  "task_status_update": null
+}
+
+If the user mentions, orders from, visits, likes, or dislikes an eating place:
+
+{
+  "reply": "message to user",
+  "memory": {
+    "profile_updates": [],
+    "recent_updates": []
+  },
+  "reminder": null,
+  "repeating_reminder": null,
+  "agent_task": null,
+  "recurring_agent_task": null,
+  "rules_updates": [],
+  "thread_rules_updates": [],
+  "thread_prompt_update": null,
+  "fridge_updates": [],
+  "food_place_updates": [
+    {
+      "name": "Quán A",
+      "place_type": "delivery",
+      "cuisine": "Vietnamese",
+      "meal_slots": ["lunch"],
+      "favorite_items": ["cơm gà"],
+      "avoid_items": [],
+      "health_notes": "Ngọc ăn ổn",
+      "delivery_apps": [],
+      "address_note": null,
+      "distance_note": null,
+      "price_note": null,
+      "status": "active",
+      "event": "ordered",
+      "notes": "trưa nay đặt về"
+    }
+  ],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -429,6 +482,7 @@ If the user updates meat or seafood but does not specify compartment:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": null
@@ -450,6 +504,7 @@ If you suggest meals for a day:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [
     {
@@ -480,6 +535,7 @@ If the user saves or records a meal:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [
     {
@@ -510,6 +566,7 @@ If the user marks a task done/skipped/canceled:
   "thread_rules_updates": [],
   "thread_prompt_update": null,
   "fridge_updates": [],
+  "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
   "task_status_update": {

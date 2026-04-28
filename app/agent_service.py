@@ -61,6 +61,7 @@ class FamilyAssistantService:
         fridge = [item.model_dump() for item in self.store.list_fridge_items()]
         fridge_warnings = self.store.fridge_warnings(now=now)
         daily_meals = [item.model_dump() for item in self.store.list_daily_meals()]
+        food_places = [item.model_dump() for item in self.store.list_food_places()]
         open_tasks = self._open_task_context(payload.conversation_id, thread_key)
 
         try:
@@ -76,6 +77,7 @@ class FamilyAssistantService:
                 fridge=fridge,
                 fridge_warnings=fridge_warnings,
                 daily_meals=daily_meals,
+                food_places=food_places,
                 open_tasks=open_tasks,
                 payload=payload,
                 now=now,
@@ -110,6 +112,7 @@ class FamilyAssistantService:
             from_uid=payload.from_uid,
         )
         fridge_updates = self.store.apply_fridge_updates(output.fridge_updates, now=now)
+        food_place_updates = self.store.apply_food_place_updates(output.food_place_updates, now=now)
         daily_meal_saved = bool(self._apply_daily_meal_updates(output, now=now))
 
         saved_reminder = False
@@ -220,6 +223,7 @@ class FamilyAssistantService:
             recurring_agent_task_saved=saved_recurring_task,
             recurring_agent_task_error=recurring_task_error,
             fridge_updates_saved=len(fridge_updates),
+            food_place_updates_saved=len(food_place_updates),
             daily_meal_saved=daily_meal_saved,
             rules_updates_saved=len(accepted_rules),
             thread_rules_updates_saved=len(accepted_thread_rules),
@@ -282,6 +286,7 @@ class FamilyAssistantService:
                 fridge=[item.model_dump() for item in self.store.list_fridge_items()],
                 fridge_warnings=self.store.fridge_warnings(now=now),
                 daily_meals=[item.model_dump() for item in self.store.list_daily_meals()],
+                food_places=[item.model_dump() for item in self.store.list_food_places()],
                 open_tasks=self._open_task_context(record.conversation_id, thread_key),
                 payload=payload,
                 now=now,
@@ -306,6 +311,7 @@ class FamilyAssistantService:
             from_uid="scheduled-agent-task",
         )
         self.store.apply_fridge_updates(output.fridge_updates, now=now)
+        self.store.apply_food_place_updates(output.food_place_updates, now=now)
         self._apply_daily_meal_updates(output, now=now)
         return await self.sender.send_text(
             text=output.reply,
@@ -355,6 +361,7 @@ class FamilyAssistantService:
                 fridge=[item.model_dump() for item in self.store.list_fridge_items()],
                 fridge_warnings=self.store.fridge_warnings(now=now),
                 daily_meals=[item.model_dump() for item in self.store.list_daily_meals()],
+                food_places=[item.model_dump() for item in self.store.list_food_places()],
                 open_tasks=self._open_task_context(record.conversation_id, thread_key),
                 payload=payload,
                 now=now,
