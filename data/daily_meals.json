@@ -1,0 +1,34 @@
+[
+  {
+    "date": "2026-04-25",
+    "meals": {
+      "lunch": {
+        "suggestions": [
+          "Trứng hấp thịt",
+          "Thịt kho trứng với cơm",
+          "Canh cải ngồng nấu tôm (hoặc thay tôm bằng thịt heo nếu tránh hải sản)"
+        ],
+        "actual_items": [
+          "Canh cải cúc",
+          "Cải ngồng xào tỏi",
+          "Thịt heo luộc",
+          "Mắm đu đủ tôm"
+        ],
+        "selected": null,
+        "notes": "Tôm còn khoảng 150g, đã nấu bớt cho bé.",
+        "updated_at": "2026-04-25T10:55:19.214575+07:00"
+      },
+      "dinner": {
+        "suggestions": [
+          "Nui sốt phô mai kèm trứng ốp la và rau xào nhẹ",
+          "Bánh mì sourdough kẹp thịt heo xay xào hành tây, ăn kèm rau luộc hoặc salad",
+          "Đậu lăng hầm nấm hương ăn với cơm gạo lứt hoặc bánh mì"
+        ],
+        "actual_items": [],
+        "selected": null,
+        "notes": "Tận dụng nguyên liệu trong tủ; ưu tiên thịt heo cho chị Ngọc.",
+        "updated_at": "2026-04-25T10:56:41.467930+07:00"
+      }
+    }
+  }
+]

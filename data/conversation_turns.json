@@ -1,0 +1,282 @@
+[
+  {
+    "ts": "2026-04-24T07:06:52.607373+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "alo Gia ơi"
+  },
+  {
+    "ts": "2026-04-24T07:06:52.607373+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "Vâng anh chị, Gia nghe đây ạ. Cần Gia giúp gì hôm nay ạ?"
+  },
+  {
+    "ts": "2026-04-24T07:07:29.930063+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "giờ anh đi mua - Giấm trắng - Hành lá - Hành tây - Hành củ tím - Tôm - Rau lá gì đó (hữu cơ) nè"
+  },
+  {
+    "ts": "2026-04-24T07:07:29.930063+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "Vâng anh chị, Gia đã ghi nhận ạ. Em cập nhật danh sách mua hàng vào tủ lạnh: giấm trắng, hành lá, hành tây, hành củ tím, tôm, rau lá (hữu cơ)."
+  },
+  {
+    "ts": "2026-04-24T07:35:12.854237+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "rau lá a mua là cải ngồng nha, tôm thì khoảng 200g"
+  },
+  {
+    "ts": "2026-04-24T07:35:12.854237+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "Vâng anh chị, Em đã làm ạ. Cập nhật: cải ngồng (hữu cơ) và tôm khoảng 200g đã vào tủ."
+  },
+  {
+    "ts": "2026-04-24T08:38:43.907281+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "sáng nay a chị ăn trứng hấp thịt nha, món này ngon, lưu lại tuần sau đề xuất nhé. Ko đi ăn phở gà nữa"
+  },
+  {
+    "ts": "2026-04-24T08:38:43.907281+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "Vâng anh chị, Em đã làm ạ. Em đã lưu món trứng hấp thịt và sẽ tránh đề xuất phở gà. Anh chị muốn Gia gợi ý món này vào ngày nào tuần sau và mấy giờ?"
+  },
+  {
+    "ts": "2026-04-24T08:39:53.531284+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "8718995391",
+    "role": "user",
+    "text": "Em cứ đề xuất khi nào anh chị hỏi nên nấu món gì, chứ ko có lịch cụ thể"
+  },
+  {
+    "ts": "2026-04-24T08:39:53.531284+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "Vâng anh chị, Em đã làm ạ. Gia sẽ chỉ gợi ý món ăn khi anh chị hỏi, không tự động lập lịch gợi ý."
+  },
+  {
+    "ts": "2026-04-24T20:31:04.221172+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "Gia ơi trưa mai ăn gì giờ"
+  },
+  {
+    "ts": "2026-04-24T20:31:04.221172+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, trưa mai Gia gợi ý 3 món nhanh gọn: 1) Trứng hấp thịt (nhanh, ưu tiên thịt heo cho chị Ngọc) 2) Thịt kho trứng ăn với cơm và dưa góp 3) Canh cải ngồng nấu tôm (tủ còn tôm ~200g) — nếu chị Ngọc tránh hải sản thì đổi tôm thành thịt heo. Anh chị muốn chốt món nào để Gia lưu lại ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:01:26.619156+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "8718995391",
+    "role": "user",
+    "text": "Trưa nay có thêm cô bảo mẫu nữa. Tôm hôm qua nấu bớt cho bé ăn còn khoảng 150g sẽ nấu canh cải cúc vì còn một ít. Cải ngồng xào tỏi Thịt heo luộc và mắm đu đủ tôm là nhanh nhất"
+  },
+  {
+    "ts": "2026-04-25T10:01:26.619156+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Đã ghi nhận ạ. Em lưu: trưa nay có thêm cô bảo mẫu; tôm còn khoảng 150g (đã nấu bớt cho bé), sẽ nấu canh cải cúc; cải ngồng xào tỏi; thịt heo luộc và mắm đu đủ tôm. Em đã cập nhật tủ. Anh chị có muốn Gia lưu thực đơn trưa nay vào lịch không ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:03:11.523059+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "8718995391",
+    "role": "user",
+    "text": "Lưu nhé. Ngoài ra anh Phú mới mua thêm trứng gà & yến mạch hữu cơ rồi."
+  },
+  {
+    "ts": "2026-04-25T10:03:11.523059+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Đã cập nhật trứng gà và yến mạch hữu cơ vào tủ."
+  },
+  {
+    "ts": "2026-04-25T10:08:32.899578+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "8718995391",
+    "role": "user",
+    "text": "Ngoài ra còn: - củ hoài sơn - hạt kê - hạt quinoa - đậu lăng (phải ngâm trc khi nấu) - gạo lứt - bánh mì sourdough - nui - bún lứt - nấm hương khô - cá cơm khô - thịt heo xay - cá đục - cá chim - cá trắm - dâu tây đông lạnh - việt quất đông lạnh - kiwi - lê - thanh long - phô mai tách muối - trứng cút ngâm tương"
+  },
+  {
+    "ts": "2026-04-25T10:08:32.899578+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Đã cập nhật các món sau vào tủ."
+  },
+  {
+    "ts": "2026-04-25T10:13:29.415853+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "Cho anh danh sách đồ tủ lạnh phân chia theo đạm, xơ, tinh bột và gia vị , trái cây đi"
+  },
+  {
+    "ts": "2026-04-25T10:13:29.415853+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, đây là danh sách đồ tủ lạnh hiện tại phân theo nhóm ạ: Đạm: - Tôm (khoảng 150g) - Thịt heo xay - Cá chim - Cá đục - Cá trắm - Cá cơm khô - Trứng gà - Trứng cút ngâm tương - Phô mai tách muối - Đậu lăng (phải ngâm trước khi nấu) Xơ (rau củ): - Cải cúc (còn một ít) - Cải ngồng (hữu cơ) - Rau lá (hữu cơ) - Hành lá, hành tây, hành củ tím - Nấm hương khô Tinh bột: - Gạo lứt - Bánh mì sourdough - Nui - Bún lứt - Yến mạch hữu cơ - Hạt kê - Hạt quinoa - Củ hoài sơn Gia vị / phụ liệu: - Giấm trắng Trái cây: - Dâu tây đông lạnh - Việt quất đông lạnh - Kiwi - Lê - Thanh long Anh cần Gia xuất danh sách này theo file, hoặc sắp xếp thành danh sách mua hàng không ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:16:33.783638+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "Từ giờ quy định là khi hỏi về các nguyên liệu trong tủ lạnh thì tự động gửi bảng đã phân chia theo nhóm Đạm, Xơ, Tinh bột, Gia Vị, Trái cây, Đồ đóng hộp nha"
+  },
+  {
+    "ts": "2026-04-25T10:16:33.783638+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Từ giờ khi anh chị hỏi về các nguyên liệu trong tủ lạnh, Gia sẽ tự động gửi bảng phân chia theo nhóm Đạm, Xơ, Tinh bột, Gia vị, Trái cây, Đồ đóng hộp. Anh chị có muốn thay đổi tên nhóm nào không ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:38:22.347139+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "a mới nhập thêm chức năng mới cho tủ lạnh em có chưa"
+  },
+  {
+    "ts": "2026-04-25T10:38:22.347139+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Gia chưa thấy chức năng mới trong tủ lạnh ạ. Anh mô tả chức năng mới hoặc gửi thông tin hướng dẫn để Gia kiểm tra và cập nhật giúp ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:39:08.286072+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "e liệt kê các đồ trong tủ lạnh hiện tại. em"
+  },
+  {
+    "ts": "2026-04-25T10:39:08.286072+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, đây là danh sách đồ trong tủ lạnh hiện tại phân theo nhóm ạ: Đạm: Tôm khoảng 150g (đã nấu bớt cho bé), thịt heo xay (xay sẵn), cá chim, cá đục, cá trắm, cá cơm khô, trứng gà, trứng cút ngâm tương, phô mai tách muối, đậu lăng (phải ngâm trước khi nấu) Xơ: Cải cúc (còn một ít), cải ngồng (hữu cơ), rau lá (hữu cơ), hành lá, hành tây, hành củ tím, nấm hương khô, củ hoài sơn Tinh bột: Gạo lứt, bánh mì sourdough, nui, bún lứt, yến mạch hữu cơ, hạt kê, hạt quinoa Gia vị: Giấm trắng Trái cây: Dâu tây đông lạnh, việt quất đông lạnh, kiwi, lê, thanh long Đồ đóng hộp: Hiện không có mục cụ thể trong tủ"
+  },
+  {
+    "ts": "2026-04-25T10:39:56.773855+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "tôm đang ngăn mát nha em, thêm từ hôm qua"
+  },
+  {
+    "ts": "2026-04-25T10:39:56.773855+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Đã cập nhật: tôm khoảng 150g, để ngăn mát, thêm từ 2026-04-24."
+  },
+  {
+    "ts": "2026-04-25T10:42:56.852531+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "gợi ý tối nay ăn gì nha"
+  },
+  {
+    "ts": "2026-04-25T10:42:56.852531+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, tối nay Gia gợi ý 3 món nhanh gọn: 1) Canh cải cúc nấu tôm (tôm còn ~150g, nên nấu hôm nay) 2) Trứng hấp thịt heo (nhanh, ưu tiên cho chị Ngọc) 3) Thịt heo luộc và cải ngồng xào tỏi (nhẹ, dễ chuẩn bị) Anh chị chốt món nào để Gia lưu lại ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:46:21.087983+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "Em lưu thực đơn trưa nay tôm còn khoảng 150g (đã nấu bớt cho bé), sẽ nấu canh cải cúc; cải ngồng xào tỏi; thịt heo luộc và mắm đu đủ tôm gợi ý dinner khác nha"
+  },
+  {
+    "ts": "2026-04-25T10:46:21.087983+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Em đã lưu thực đơn trưa nay: canh cải cúc; cải ngồng xào tỏi; thịt heo luộc + mắm đu đủ tôm (tôm còn ~150g, đã nấu bớt cho bé). Gợi ý tối nay khác nhanh gọn: 1) Thịt heo xay xào sả ớt ăn với rau luộc và cơm gạo lứt (nhanh, ưu tiên cho chị Ngọc) 2) Cá chiên giòn (dùng cá chim hoặc cá đục) chấm mắm thơm + rau xào nhẹ 3) Đậu lăng hầm cà chua ăn với bánh mì sourdough hoặc cơm (phải ngâm đậu trước) Anh chị chốt món nào để Gia lưu lại ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:55:19.214575+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "em lưu lại bữa ăn trưa nay nhé, gợi ý anh thêm 3 món dinner nữa"
+  },
+  {
+    "ts": "2026-04-25T10:55:19.214575+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã làm ạ. Em đã lưu thực đơn trưa nay. Gợi ý tối nay 3 món khác nhanh gọn: 1) Thịt heo xay xào nấm hương ăn với cơm gạo lứt 2) Cá chiên giòn chấm mắm tỏi (dùng cá chim hoặc cá đục) kèm rau xào 3) Bánh mì sourdough kẹp trứng ốp la và phô mai tách muối, ăn kèm salad rau. Anh chị chốt món nào để Gia lưu lại ạ?"
+  },
+  {
+    "ts": "2026-04-25T10:56:41.467930+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "gợi ý thêm xem Gia"
+  },
+  {
+    "ts": "2026-04-25T10:56:41.467930+07:00",
+    "conversation_id": "-5270204884",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em gợi ý thêm 3 món tối nay: 1) Nui sốt phô mai kèm trứng ốp la và rau xào nhẹ — nhanh, tận dụng nui + phô mai + trứng 2) Bánh mì sourdough kẹp thịt heo xay xào hành tây, ăn kèm rau luộc hoặc salad — tiện và ưu tiên thịt heo cho chị Ngọc 3) Đậu lăng hầm nấm hương ăn với cơm gạo lứt hoặc bánh mì — bữa nhẹ, dễ tiêu Anh chị muốn Gia lưu món tối nay hoặc chốt món nào để Em lưu không ạ?"
+  },
+  {
+    "ts": "2026-04-25T20:40:50.258978+07:00",
+    "conversation_id": "384060440",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "tí 9h nhắc a thay nến bàn thờ nha"
+  },
+  {
+    "ts": "2026-04-25T20:40:50.258978+07:00",
+    "conversation_id": "384060440",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, anh Phú muốn Gia nhắc thay nến bàn thờ lúc 21:00 tối nay hay 09:00 sáng mai ạ?"
+  },
+  {
+    "ts": "2026-04-25T20:41:20.903525+07:00",
+    "conversation_id": "384060440",
+    "from_uid": "384060440",
+    "role": "user",
+    "text": "21h tối nay"
+  },
+  {
+    "ts": "2026-04-25T20:41:20.903525+07:00",
+    "conversation_id": "384060440",
+    "from_uid": null,
+    "role": "assistant",
+    "text": "vâng anh chị, Em đã đặt nhắc thay nến bàn thờ lúc 21:00 tối nay ạ."
+  }
+]
