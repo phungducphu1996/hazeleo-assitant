@@ -17,7 +17,7 @@ FoodPlaceEvent = Literal["mentioned", "ordered", "visited", "disliked", "updated
 
 
 class ZaloIncomingRequest(BaseModel):
-    text: str = Field(..., min_length=1, max_length=1000)
+    text: str = Field(..., min_length=1, max_length=4096)
     source: str = Field(default="zalo", max_length=50)
     from_uid: str | None = Field(default=None, max_length=255)
     conversation_id: str | None = Field(default=None, max_length=255)

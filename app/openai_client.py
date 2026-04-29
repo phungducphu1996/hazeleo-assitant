@@ -110,28 +110,34 @@ class OpenAIAgentClient:
             "Content-Type": "application/json",
         }
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await _post_response(
-                client=client,
-                url=f"{self.settings.normalized_openai_base_url}/responses",
-                headers=headers,
-                payload=request_payload,
-            )
-            if response.status_code >= 400 and "temperature" in request_payload and _mentions_temperature(response.text):
-                retry_payload = dict(request_payload)
-                retry_payload.pop("temperature", None)
-                print("OPENAI_RETRY_WITHOUT_TEMPERATURE", {"model": self.settings.openai_model})
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
                 response = await _post_response(
                     client=client,
                     url=f"{self.settings.normalized_openai_base_url}/responses",
                     headers=headers,
-                    payload=retry_payload,
+                    payload=request_payload,
                 )
+                if response.status_code >= 400 and "temperature" in request_payload and _mentions_temperature(response.text):
+                    retry_payload = dict(request_payload)
+                    retry_payload.pop("temperature", None)
+                    print("OPENAI_RETRY_WITHOUT_TEMPERATURE", {"model": self.settings.openai_model})
+                    response = await _post_response(
+                        client=client,
+                        url=f"{self.settings.normalized_openai_base_url}/responses",
+                        headers=headers,
+                        payload=retry_payload,
+                    )
+        except httpx.HTTPError as exc:
+            raise AgentModelError(f"openai_request_error: {type(exc).__name__}: {exc}") from exc
 
         if response.status_code >= 400:
             raise AgentModelError(f"openai_http_{response.status_code}: {response.text[:500]}")
 
-        raw_payload = response.json()
+        try:
+            raw_payload = response.json()
+        except ValueError as exc:
+            raise AgentModelError(f"invalid_openai_response_json: {exc}") from exc
         text = _extract_response_text(raw_payload)
         if not text:
             raise AgentModelError("empty_openai_response")

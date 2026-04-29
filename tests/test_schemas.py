@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import json
+import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
-from app.openai_client import _extract_response_text, _model_supports_temperature
-from app.schemas import AgentOutput, ReminderRecord
+import httpx
+import pytest
+
+from app.config import Settings
+from app.openai_client import AgentModelError, OpenAIAgentClient, _extract_response_text, _model_supports_temperature
+from app.schemas import AgentOutput, ReminderRecord, ZaloIncomingRequest
 
 
 def test_agent_output_accepts_chat_without_reminder() -> None:
@@ -18,6 +25,34 @@ def test_agent_output_accepts_chat_without_reminder() -> None:
     assert parsed.reply == "tối nay ăn nhẹ nha"
     assert parsed.memory.profile_updates == ["Ngọc đang ốm nghén"]
     assert parsed.reminder is None
+
+
+def test_incoming_request_accepts_long_telegram_text() -> None:
+    payload = ZaloIncomingRequest(text="x" * 1500, source="telegram")
+
+    assert len(payload.text) == 1500
+
+
+def test_openai_client_wraps_http_errors(monkeypatch, tmp_path) -> None:
+    async def raise_timeout(**_kwargs):
+        raise httpx.ReadTimeout("timed out")
+
+    monkeypatch.setattr("app.openai_client._post_response", raise_timeout)
+    settings = Settings(data_dir=tmp_path / "data", openai_api_key="test-key")
+    client = OpenAIAgentClient(settings)
+
+    with pytest.raises(AgentModelError) as exc_info:
+        asyncio.run(
+            client.run(
+                agent_prompt="Return JSON only.",
+                profile="",
+                recent=[],
+                payload=ZaloIncomingRequest(text="xin chào"),
+                now=datetime(2026, 4, 29, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh")),
+            )
+        )
+
+    assert "ReadTimeout" in str(exc_info.value)
 
 
 def test_agent_output_accepts_reminder() -> None:
