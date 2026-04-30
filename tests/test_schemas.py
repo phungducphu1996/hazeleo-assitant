@@ -55,6 +55,12 @@ def test_openai_client_wraps_http_errors(monkeypatch, tmp_path) -> None:
     assert "ReadTimeout" in str(exc_info.value)
 
 
+def test_openai_timeout_defaults_to_two_minutes() -> None:
+    settings = Settings(openai_api_key="test-key")
+
+    assert settings.openai_timeout_seconds == 120.0
+
+
 def test_agent_output_accepts_reminder() -> None:
     payload = {
         "reply": "ok mai mình nhắc nha",

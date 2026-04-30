@@ -111,7 +111,7 @@ class OpenAIAgentClient:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=45.0) as client:
+            async with httpx.AsyncClient(timeout=max(1.0, self.settings.openai_timeout_seconds)) as client:
                 response = await _post_response(
                     client=client,
                     url=f"{self.settings.normalized_openai_base_url}/responses",

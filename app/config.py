@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-4.1-mini", validation_alias="OPENAI_MODEL")
     openai_api_base_url: str = Field(default="https://api.openai.com/v1", validation_alias="OPENAI_API_BASE_URL")
     openai_temperature: float = Field(default=0.2, validation_alias="OPENAI_TEMPERATURE")
+    openai_timeout_seconds: float = Field(default=120.0, validation_alias="OPENAI_TIMEOUT_SECONDS")
 
     zalo_worker_url: str = Field(default="http://127.0.0.1:8787", validation_alias="ZALO_WORKER_URL")
     zalo_shared_secret: str | None = Field(default=None, validation_alias="ZALO_SHARED_SECRET")
