@@ -157,34 +157,6 @@ class FamilyAssistantService:
             if not task_status_updated and task_status_error == "task_not_found":
                 output.reply = "Anh chị muốn Gia đánh dấu việc nào ạ?"
 
-        output.reply = _guard_schedule_reply(
-            output.reply,
-            payload_text=payload.text,
-            has_schedule_output=any(
-                item is not None
-                for item in (
-                    output.reminder,
-                    output.repeating_reminder,
-                    output.agent_task,
-                    output.recurring_agent_task,
-                )
-            ),
-            saved_any_schedule=any(
-                (
-                    saved_reminder,
-                    saved_repeating_reminder,
-                    saved_agent_task,
-                    saved_recurring_task,
-                )
-            ),
-            errors=[
-                reminder_error,
-                repeating_reminder_error,
-                agent_task_error,
-                recurring_task_error,
-            ],
-        )
-
         delivery = None
         if send_reply and payload.conversation_id:
             delivery = await self.sender.send_text(
@@ -558,91 +530,6 @@ def _read_agent_prompt(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except OSError:
         return "You are a short, warm Vietnamese family assistant. Return valid JSON only."
-
-
-_SCHEDULE_INTENT_KEYWORDS = (
-    "nhac",
-    "reminder",
-    "remind",
-    "hẹn",
-    "lịch",
-    "lich",
-    "task",
-    "việc",
-    "viec",
-    "mỗi ngày",
-    "moi ngay",
-    "hằng ngày",
-    "hang ngay",
-    "cứ mỗi",
-    "cu moi",
-)
-
-_SAVED_CLAIM_KEYWORDS = (
-    "da luu",
-    "da dat",
-    "dat roi",
-    "da them",
-    "them roi",
-    "da tao",
-    "tao roi",
-    "gia da luu",
-    "gia dat",
-    "ok ",
-    "oke",
-)
-
-
-def _guard_schedule_reply(
-    reply: str,
-    *,
-    payload_text: str,
-    has_schedule_output: bool,
-    saved_any_schedule: bool,
-    errors: list[str | None],
-) -> str:
-    if saved_any_schedule:
-        return reply
-    if not _looks_like_schedule_intent(payload_text):
-        return reply
-    if not has_schedule_output and not _claims_schedule_saved(reply):
-        return reply
-
-    error = next((item for item in errors if item), None)
-    if error:
-        return _schedule_error_reply(error)
-    return (
-        "Gia chưa lưu được lịch nhắc/task này nha. "
-        "Anh chị nhắn lại rõ nội dung và thời gian giúp Gia với."
-    )
-
-
-def _looks_like_schedule_intent(text: str) -> bool:
-    normalized = _normalize_vietnamese(text)
-    return any(keyword in normalized for keyword in _SCHEDULE_INTENT_KEYWORDS)
-
-
-def _claims_schedule_saved(text: str) -> bool:
-    normalized = _normalize_vietnamese(text)
-    return any(keyword in normalized for keyword in _SAVED_CLAIM_KEYWORDS)
-
-
-def _schedule_error_reply(error: str) -> str:
-    if "not_future" in error:
-        return "Gia chưa lưu được vì thời gian này đã qua rồi nha. Anh chị gửi lại giờ mới giúp Gia với."
-    if "invalid" in error:
-        return "Gia chưa lưu được vì thời gian chưa rõ/hợp lệ nha. Anh chị nói lại giờ cụ thể giúp Gia với."
-    return "Gia chưa lưu được lịch nhắc/task này nha. Anh chị nói lại giúp Gia với."
-
-
-def _normalize_vietnamese(value: str) -> str:
-    import re
-    import unicodedata
-
-    text = unicodedata.normalize("NFKD", str(value or "").lower().replace("đ", "d"))
-    text = "".join(char for char in text if not unicodedata.combining(char))
-    text = re.sub(r"[^a-z0-9]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def _payload_thread_key(payload: ZaloIncomingRequest) -> str | None:

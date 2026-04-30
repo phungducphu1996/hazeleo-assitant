@@ -106,7 +106,7 @@ def test_zalo_incoming_saves_memory_reminder_and_sends_reply(tmp_path) -> None:
     assert store.list_reminders()[0].text == "mua sữa cho Ngọc"
 
 
-def test_schedule_reply_is_guarded_when_model_claims_saved_without_structured_task(tmp_path) -> None:
+def test_model_reply_is_not_guarded_when_schedule_fields_are_empty(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)
     fake_sender = FakeSender()
@@ -145,11 +145,11 @@ def test_schedule_reply_is_guarded_when_model_claims_saved_without_structured_ta
         )
 
     assert response.status_code == 200
-    assert "chưa lưu được" in fake_sender.sent[0]["text"]
+    assert fake_sender.sent[0]["text"] == "ok Gia đã thêm task này rồi nha"
     assert store.list_reminders() == []
 
 
-def test_schedule_reply_is_guarded_when_structured_task_save_fails(tmp_path) -> None:
+def test_model_reply_is_not_guarded_when_structured_task_save_fails(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)
     past = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(hours=1)
@@ -183,10 +183,10 @@ def test_schedule_reply_is_guarded_when_structured_task_save_fails(tmp_path) -> 
                     "chat": {"id": 12345, "type": "private"},
                 },
             },
-        )
+    )
 
     assert response.status_code == 200
-    assert "thời gian này đã qua" in fake_sender.sent[0]["text"]
+    assert fake_sender.sent[0]["text"] == "ok Gia đã đặt lịch nhắc rồi nha"
     assert store.list_reminders() == []
 
 
