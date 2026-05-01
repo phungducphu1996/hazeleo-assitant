@@ -1101,12 +1101,6 @@ def _find_matching_reminder(
             continue
         if record.status == "failed":
             continue
-        if (
-            completion_status != "canceled"
-            and record.status != "sent"
-            and not (record.kind == "repeating_reminder" and record.sent_at)
-        ):
-            continue
         if target_key and not _record_matches_target(record, target_key):
             continue
         candidates.append(record)

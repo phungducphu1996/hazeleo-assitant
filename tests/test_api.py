@@ -190,6 +190,47 @@ def test_model_reply_is_not_guarded_when_structured_task_save_fails(tmp_path) ->
     assert store.list_reminders() == []
 
 
+def test_model_reply_is_not_overridden_when_task_status_match_fails(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="Gia chưa thấy việc đó rõ lắm, anh chị muốn Gia đánh dấu việc nào ạ?",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                task_status_update={"target_text": "mua sữa", "completion_status": "done", "note": None},
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 117,
+                "message": {
+                    "message_id": 29,
+                    "text": "xong rồi",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert fake_sender.sent[0]["text"] == "Gia chưa thấy việc đó rõ lắm, anh chị muốn Gia đánh dấu việc nào ạ?"
+    assert store.list_reminders() == []
+
+
 def test_telegram_webhook_marks_recent_sent_reminder_done(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)

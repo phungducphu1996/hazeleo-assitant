@@ -154,8 +154,6 @@ class FamilyAssistantService:
                 now,
                 thread_key,
             )
-            if not task_status_updated and task_status_error == "task_not_found":
-                output.reply = "Anh chị muốn Gia đánh dấu việc nào ạ?"
 
         delivery = None
         if send_reply and payload.conversation_id:

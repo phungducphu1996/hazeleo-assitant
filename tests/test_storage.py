@@ -194,6 +194,32 @@ def test_sent_reminder_can_be_marked_done_by_recent_match(tmp_path) -> None:
     assert updated.completion_note == "đã mua"
 
 
+def test_pending_reminder_can_be_marked_done_by_target_text(tmp_path) -> None:
+    store = FileStore(tmp_path)
+    now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
+    store.add_reminder(
+        text="mua sữa",
+        reminder_time=now + timedelta(hours=1),
+        now=now,
+        conversation_id="conv-1",
+        conversation_type="user",
+    )
+
+    updated = store.complete_matching_reminder(
+        conversation_id="conv-1",
+        target_text="nhắc mua sữa",
+        completion_status="done",
+        now=now + timedelta(minutes=5),
+        completed_by="user-1",
+        note="mua sớm rồi",
+    )
+
+    assert updated is not None
+    assert updated.completion_status == "done"
+    assert updated.status == "pending"
+    assert updated.completion_note == "mua sớm rồi"
+
+
 def test_completion_does_not_cross_conversation(tmp_path) -> None:
     store = FileStore(tmp_path)
     now = datetime(2026, 4, 22, 9, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))
