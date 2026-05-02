@@ -149,7 +149,7 @@ def test_model_reply_is_not_guarded_when_schedule_fields_are_empty(tmp_path) -> 
     assert store.list_reminders() == []
 
 
-def test_model_reply_is_not_guarded_when_structured_task_save_fails(tmp_path) -> None:
+def test_past_reminder_time_is_saved_as_now(tmp_path) -> None:
     settings = _settings(tmp_path, secret="")
     store = FileStore(settings.data_dir)
     past = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(hours=1)
@@ -187,7 +187,57 @@ def test_model_reply_is_not_guarded_when_structured_task_save_fails(tmp_path) ->
 
     assert response.status_code == 200
     assert fake_sender.sent[0]["text"] == "ok Gia đã đặt lịch nhắc rồi nha"
-    assert store.list_reminders() == []
+    saved = store.list_reminders()[0]
+    assert saved.text == "mua sữa"
+    assert datetime.fromisoformat(saved.time) > past
+
+
+def test_repeating_reminder_accepts_nowish_start_time(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    nowish = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) - timedelta(seconds=30)
+    fake_sender = FakeSender()
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=FakeModelClient(
+            AgentOutput(
+                reply="Gia bắt đầu nhắc từ bây giờ nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                repeating_reminder={
+                    "text": "mua diệt kiến",
+                    "time": nowish.isoformat(),
+                    "repeat_interval_minutes": 60,
+                },
+            )
+        ),
+        sender=fake_sender,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 118,
+                "message": {
+                    "message_id": 30,
+                    "text": "nhắc mua diệt kiến",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    saved = store.list_reminders()[0]
+    assert saved.kind == "repeating_reminder"
+    assert saved.text == "mua diệt kiến"
+    assert saved.repeat_interval_minutes == 60
 
 
 def test_model_reply_is_not_overridden_when_task_status_match_fails(tmp_path) -> None:

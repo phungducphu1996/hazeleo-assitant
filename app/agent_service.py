@@ -353,8 +353,7 @@ class FamilyAssistantService:
         except ValueError:
             return False, "invalid_reminder_time"
 
-        if reminder_time <= now:
-            return False, "reminder_time_not_future"
+        reminder_time = _coerce_past_schedule_datetime(reminder_time, now)
 
         self.store.add_reminder(
             text=reminder.text,
@@ -402,8 +401,7 @@ class FamilyAssistantService:
         except ValueError:
             return False, "invalid_repeating_reminder_time"
 
-        if first_run_at <= now:
-            return False, "repeating_reminder_time_not_future"
+        first_run_at = _coerce_past_schedule_datetime(first_run_at, now)
 
         self.store.add_repeating_reminder(
             text=repeating_reminder.text,
@@ -429,8 +427,7 @@ class FamilyAssistantService:
         except ValueError:
             return False, "invalid_agent_task_time"
 
-        if run_at <= now:
-            return False, "agent_task_time_not_future"
+        run_at = _coerce_past_schedule_datetime(run_at, now)
 
         self.store.add_agent_task(
             title=agent_task.title,
@@ -547,6 +544,12 @@ def _parse_agent_datetime(value: str, now: datetime) -> datetime:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=now.tzinfo)
     return parsed.astimezone(now.tzinfo)
+
+
+def _coerce_past_schedule_datetime(value: datetime, now: datetime) -> datetime:
+    if value > now:
+        return value
+    return now
 
 
 def _collect_daily_meal_updates(output: AgentOutput) -> list[DailyMealUpdate]:
