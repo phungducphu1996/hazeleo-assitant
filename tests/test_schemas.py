@@ -325,6 +325,32 @@ def test_agent_output_accepts_task_status_update() -> None:
     assert parsed.task_status_update.completion_status == "done"
 
 
+def test_agent_output_accepts_skylight_actions() -> None:
+    payload = {
+        "reply": "Gia kiểm tra Skylight xíu nha",
+        "memory": {"profile_updates": [], "recent_updates": []},
+        "reminder": None,
+        "agent_task": None,
+        "recurring_agent_task": None,
+        "rules_updates": [],
+        "fridge_updates": [],
+        "daily_meal_update": None,
+        "daily_meal_updates": [],
+        "task_status_update": None,
+        "skylight_actions": [
+            {
+                "tool": "get_meals",
+                "arguments": {"date_min": "2026-05-05", "date_max": "2026-05-05"},
+            }
+        ],
+    }
+
+    parsed = AgentOutput.model_validate(payload)
+
+    assert parsed.skylight_actions[0].tool == "get_meals"
+    assert parsed.skylight_actions[0].arguments["date_min"] == "2026-05-05"
+
+
 def test_old_reminder_record_defaults_completion_status() -> None:
     parsed = ReminderRecord.model_validate(
         {

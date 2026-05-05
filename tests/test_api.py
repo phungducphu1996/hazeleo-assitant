@@ -15,13 +15,24 @@ from app.thread_context import build_thread_key
 
 
 class FakeModelClient:
-    def __init__(self, output: AgentOutput) -> None:
-        self.output = output
+    def __init__(self, output: AgentOutput | list[AgentOutput]) -> None:
+        self.outputs = output if isinstance(output, list) else [output]
         self.calls: list[dict] = []
 
     async def run(self, **_kwargs) -> AgentOutput:
         self.calls.append(_kwargs)
-        return self.output
+        index = min(len(self.calls) - 1, len(self.outputs) - 1)
+        return self.outputs[index]
+
+
+class FakeSkylightClient:
+    def __init__(self, results: list[dict]) -> None:
+        self.results = results
+        self.actions: list[list] = []
+
+    async def execute_actions(self, actions):
+        self.actions.append(actions)
+        return self.results
 
 
 class FakeSender:
@@ -104,6 +115,74 @@ def test_zalo_incoming_saves_memory_reminder_and_sends_reply(tmp_path) -> None:
     assert "Ngọc đang ốm nghén" in store.read_profile()
     assert store.list_recent()[0].text == "Tủ lạnh còn trứng và rau cải"
     assert store.list_reminders()[0].text == "mua sữa cho Ngọc"
+
+
+def test_telegram_webhook_executes_skylight_action_and_finalizes_reply(tmp_path) -> None:
+    settings = _settings(tmp_path, secret="")
+    store = FileStore(settings.data_dir)
+    fake_sender = FakeSender()
+    skylight_client = FakeSkylightClient(
+        [
+            {
+                "tool": "get_meals",
+                "arguments": {"date_min": "2026-05-05", "date_max": "2026-05-05"},
+                "ok": True,
+                "result": {"json": {"meals": [{"summary": "cháo cá", "date": "2026-05-05"}]}},
+            }
+        ]
+    )
+    model_client = FakeModelClient(
+        [
+            AgentOutput(
+                reply="Gia kiểm tra Skylight xíu nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                skylight_actions=[
+                    {
+                        "tool": "get_meals",
+                        "arguments": {"date_min": "2026-05-05", "date_max": "2026-05-05"},
+                    }
+                ],
+            ),
+            AgentOutput(
+                reply="Hôm nay Skylight đang có món cháo cá nha",
+                memory=AgentMemoryUpdates(),
+                reminder=None,
+                skylight_actions=[],
+            ),
+        ]
+    )
+    service = FamilyAssistantService(
+        settings=settings,
+        store=store,
+        model_client=model_client,
+        sender=fake_sender,
+        skylight_client=skylight_client,
+    )
+    app = create_app(settings)
+
+    with TestClient(app) as client:
+        app.state.telegram_assistant_service = service
+        app.state.telegram_poller.assistant_service = service
+        response = client.post(
+            "/telegram/webhook",
+            headers={"X-Telegram-Bot-Api-Secret-Token": "telegram-secret"},
+            json={
+                "update_id": 119,
+                "message": {
+                    "message_id": 31,
+                    "text": "Skylight hôm nay ăn gì vậy Gia",
+                    "from": {"id": 999},
+                    "chat": {"id": 12345, "type": "private"},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert fake_sender.sent[0]["text"] == "Hôm nay Skylight đang có món cháo cá nha"
+    assert len(model_client.calls) == 2
+    assert model_client.calls[1]["skylight_results"][0]["result"]["json"]["meals"][0]["summary"] == "cháo cá"
+    assert skylight_client.actions[0][0].tool == "get_meals"
 
 
 def test_model_reply_is_not_guarded_when_schedule_fields_are_empty(tmp_path) -> None:

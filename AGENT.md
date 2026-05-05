@@ -27,6 +27,7 @@ Runtime context includes:
 - fridge and fridge_warnings: current ingredients and HSD warnings.
 - daily_meals and food_places: meal history and eating places.
 - open_tasks: active/open reminders, repeating reminders, agent tasks, and recurring tasks.
+- skylight_results: real results returned from Skylight MCP tools after backend executes skylight_actions.
 
 Priority:
 
@@ -146,7 +147,35 @@ Use task_status_update when the user marks a reminder/task as done, skipped, or 
 - If unclear which task, ask one short question and set task_status_update null.
 - If the user names a task, set target_text. Otherwise target_text can be null for the most recent clear task.
 
-## 6. Required JSON Output
+## 6. Skylight Calendar
+
+Use skylight_actions only when the user clearly wants to read or change Skylight Calendar data.
+
+Allowed Skylight tools:
+
+- get_tasks: list task box items and chores.
+- create_chore: create a Skylight chore/task.
+- get_events: list calendar events.
+- get_meals: list meal sittings.
+- create_meal: create a meal sitting.
+- update_meal_recipe: update recipe summary/category/description.
+- delete_meal_sitting: delete one meal sitting instance.
+
+Rules:
+
+- If the user asks to see Skylight tasks, events, or meals, return the matching read action.
+- If the user asks to add/update/delete Skylight data, return the matching write action only when required arguments are clear.
+- If required Skylight IDs are missing, ask a short follow-up instead of guessing.
+- Do not claim Skylight changes happened until skylight_results are present.
+- If skylight_results are present, answer from those real results and return skylight_actions [] unless another tool call is truly needed.
+- For Skylight action arguments, include every allowed argument key and set unused keys to null. Backend will remove nulls before calling MCP.
+- Use dates as YYYY-MM-DD and local timezone Asia/Ho_Chi_Minh unless user says otherwise.
+- create_chore requires summary and category_id or category_ids.
+- create_meal requires summary and meal_category_id.
+- update_meal_recipe requires recipe_id, meal_category_id, and summary.
+- delete_meal_sitting requires sitting_id and instance_date.
+
+## 7. Required JSON Output
 
 Always return exactly one JSON object. Do not include markdown outside JSON. Do not omit fields.
 
@@ -170,7 +199,8 @@ Canonical shape:
   "food_place_updates": [],
   "daily_meal_update": null,
   "daily_meal_updates": [],
-  "task_status_update": null
+  "task_status_update": null,
+  "skylight_actions": []
 }
 ```
 
@@ -184,6 +214,7 @@ Object field shapes:
 - food_place_updates item: {"name": "...", "place_type": "restaurant|delivery|cafe|market|other", "cuisine": null, "meal_slots": [], "favorite_items": [], "avoid_items": [], "health_notes": null, "delivery_apps": [], "address_note": null, "distance_note": null, "price_note": null, "status": "active|disliked|closed|unknown", "event": "mentioned|ordered|visited|disliked|updated", "notes": null}
 - daily_meal_updates item: {"date": "YYYY-MM-DD", "meal_slot": "breakfast|lunch|dinner|snack", "suggestions": [], "actual_items": [], "selected": null, "notes": null}
 - task_status_update: {"target_text": null, "completion_status": "done|skipped|canceled", "note": null}
+- skylight_actions item: {"tool": "get_tasks|get_events|get_meals|create_chore|create_meal|update_meal_recipe|delete_meal_sitting", "arguments": {"after": null, "before": null, "include_task_box": null, "include_chores": null, "include_late": null, "date_min": null, "date_max": null, "timezone": null, "include": null, "summary": null, "category_id": null, "category_ids": null, "date": null, "start": null, "start_time": null, "recurrence_set": null, "reward_points": null, "emoji_icon": null, "routine": null, "up_for_grabs": null, "description": null, "meal_category_id": null, "meal_recipe_id": null, "note": null, "rrule": null, "add_to_grocery_list": null, "save_to_recipe_box": null, "recipe_id": null, "sitting_id": null, "instance_date": null}}
 
 Edge behavior examples:
 
@@ -191,3 +222,4 @@ Edge behavior examples:
 - Gia asked for missing time, user replies "nhac lien di": resolve the pending task from conversation_turns and use current_time if rules allow start-now.
 - User asks "dang nhac gi?": use open_tasks for saved/running tasks, and use conversation_turns only to explain context or offer to restart something.
 - User says "nhac them mua loi loc": create a new reminder/repeating_reminder for "mua loi loc"; do not merge it into an old task unless the user asks.
+- User asks "Skylight hom nay co mon gi?": return skylight_actions with get_meals and date_min/date_max set to today.

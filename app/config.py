@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     conversation_turn_retention_days: int = Field(default=5, validation_alias="CONVERSATION_TURN_RETENTION_DAYS")
     conversation_turn_context_limit: int = Field(default=30, validation_alias="CONVERSATION_TURN_CONTEXT_LIMIT")
 
+    skylight_enabled: bool = Field(default=False, validation_alias="SKYLIGHT_ENABLED")
+    skylight_mcp_command: str = Field(default="node", validation_alias="SKYLIGHT_MCP_COMMAND")
+    skylight_mcp_args: str = Field(
+        default="/Users/leo/Documents/New project/mcp/skylight.mjs",
+        validation_alias="SKYLIGHT_MCP_ARGS",
+    )
+    skylight_mcp_timeout_seconds: float = Field(default=30.0, validation_alias="SKYLIGHT_MCP_TIMEOUT_SECONDS")
+
     data_dir: Path = Field(default=Path("data"), validation_alias="DATA_DIR")
     agent_prompt_path: Path = Field(default=Path("AGENT.md"), validation_alias="AGENT_PROMPT_PATH")
 

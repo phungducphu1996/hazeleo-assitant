@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.openai_client import OpenAIAgentClient
 from app.reminders import ReminderPoller
 from app.schemas import TelegramWebhookResponse, ZaloIncomingRequest, ZaloIncomingResponse
+from app.skylight_client import SKYLIGHT_ALLOWED_TOOLS, SkylightMCPClient, SkylightMCPError
 from app.storage import FileStore
 from app.telegram_poller import TelegramUpdatePoller
 from app.telegram_sender import TelegramSender
@@ -25,17 +26,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     zalo_sender = ZaloSender(resolved_settings)
     telegram_sender = TelegramSender(resolved_settings)
     model_client = OpenAIAgentClient(resolved_settings)
+    skylight_client = SkylightMCPClient(resolved_settings)
     zalo_assistant_service = FamilyAssistantService(
         settings=resolved_settings,
         store=store,
         model_client=model_client,
         sender=zalo_sender,
+        skylight_client=skylight_client,
     )
     telegram_assistant_service = FamilyAssistantService(
         settings=resolved_settings,
         store=store,
         model_client=model_client,
         sender=telegram_sender,
+        skylight_client=skylight_client,
     )
     poller = ReminderPoller(
         settings=resolved_settings,
@@ -57,6 +61,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.zalo_sender = zalo_sender
         app.state.telegram_sender = telegram_sender
         app.state.model_client = model_client
+        app.state.skylight_client = skylight_client
         app.state.assistant_service = telegram_assistant_service
         app.state.zalo_assistant_service = zalo_assistant_service
         app.state.telegram_assistant_service = telegram_assistant_service
@@ -76,6 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.zalo_sender = zalo_sender
     app.state.telegram_sender = telegram_sender
     app.state.model_client = model_client
+    app.state.skylight_client = skylight_client
     app.state.assistant_service = telegram_assistant_service
     app.state.zalo_assistant_service = zalo_assistant_service
     app.state.telegram_assistant_service = telegram_assistant_service
@@ -89,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "service": "family-assistant-ver2",
             "telegram_configured": telegram_sender.configured,
             "telegram_polling_enabled": resolved_settings.telegram_polling_enabled,
+            "skylight_configured": skylight_client.configured,
         }
 
     @app.post("/zalo/incoming", response_model=ZaloIncomingResponse)
@@ -163,6 +170,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "reminders": [item.model_dump() for item in request.app.state.store.list_reminders()],
             "recurring_tasks": [item.model_dump() for item in request.app.state.store.list_recurring_tasks()],
         }
+
+    @app.get("/api/skylight/health")
+    async def skylight_health(
+        request: Request,
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        try:
+            return await request.app.state.skylight_client.health()
+        except Exception as exc:
+            return {"ok": False, "configured": request.app.state.skylight_client.configured, "error": str(exc)}
+
+    @app.post("/api/skylight/tool")
+    async def skylight_tool(
+        request: Request,
+        payload: dict = Body(...),
+        internal_secret: str | None = Header(default=None, alias="X-Internal-Secret"),
+    ) -> dict[str, object]:
+        _require_internal_secret(request.app.state.settings, internal_secret)
+        tool = str(payload.get("tool") or "").strip()
+        if tool not in SKYLIGHT_ALLOWED_TOOLS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Skylight tool.")
+        arguments = payload.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="arguments must be an object.")
+        try:
+            result = await request.app.state.skylight_client.call_tool(tool, arguments)
+        except SkylightMCPError as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+        return {"ok": not bool(result.get("isError")), "tool": tool, "arguments": arguments, "result": result}
 
     @app.get("/api/threads")
     async def threads(

@@ -35,6 +35,7 @@ class OpenAIAgentClient:
         daily_meals: list[dict[str, Any]] | None = None,
         food_places: list[dict[str, Any]] | None = None,
         open_tasks: list[dict[str, Any]] | None = None,
+        skylight_results: list[dict[str, Any]] | None = None,
         payload: ZaloIncomingRequest,
         now: datetime,
     ) -> AgentOutput:
@@ -57,6 +58,7 @@ class OpenAIAgentClient:
             "daily_meals": daily_meals or [],
             "food_places": food_places or [],
             "open_tasks": open_tasks or [],
+            "skylight_results": skylight_results or [],
             "incoming": payload.model_dump(),
             "rules": [
                 "Return JSON only and follow the provided schema.",
@@ -66,6 +68,7 @@ class OpenAIAgentClient:
                 "Do not invent memory facts, active tasks, fridge items, food places, or meal history.",
                 "When reminder time or frequency is missing, obey rules_md/thread_rules_md defaults before asking a follow-up.",
                 "Use structured fields whenever the user asks to remember, schedule, update fridge/meal/food place, or mark tasks done.",
+                "Use skylight_actions only when the user wants to read or change Skylight Calendar tasks, events, or meals. If skylight_results are present, answer from those results and normally return skylight_actions as an empty array.",
             ],
         }
 

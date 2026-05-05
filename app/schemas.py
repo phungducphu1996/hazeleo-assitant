@@ -14,6 +14,15 @@ FoodPlaceType = Literal["restaurant", "delivery", "cafe", "market", "other"]
 FoodPlaceCuisine = Literal["Vietnamese", "Japanese", "Korean", "Western", "Chinese", "Thai", "other"]
 FoodPlaceStatus = Literal["active", "disliked", "closed", "unknown"]
 FoodPlaceEvent = Literal["mentioned", "ordered", "visited", "disliked", "updated"]
+SkylightToolName = Literal[
+    "get_tasks",
+    "create_chore",
+    "get_events",
+    "get_meals",
+    "create_meal",
+    "update_meal_recipe",
+    "delete_meal_sitting",
+]
 
 
 class ZaloIncomingRequest(BaseModel):
@@ -69,6 +78,9 @@ class ZaloIncomingResponse(BaseModel):
     task_status_update: "TaskStatusUpdateDraft | None" = None
     task_status_updated: bool = False
     task_status_error: str | None = None
+    skylight_actions: list["SkylightAction"] = Field(default_factory=list)
+    skylight_results: list[dict] = Field(default_factory=list)
+    skylight_error: str | None = None
 
 
 class TelegramWebhookResponse(BaseModel):
@@ -151,6 +163,11 @@ class TaskStatusUpdateDraft(BaseModel):
     note: str | None = Field(default=None, max_length=300)
 
 
+class SkylightAction(BaseModel):
+    tool: SkylightToolName
+    arguments: dict = Field(default_factory=dict)
+
+
 class AgentOutput(BaseModel):
     reply: str = Field(..., min_length=1, max_length=2000)
     memory: AgentMemoryUpdates = Field(default_factory=AgentMemoryUpdates)
@@ -166,6 +183,7 @@ class AgentOutput(BaseModel):
     daily_meal_update: DailyMealUpdate | None = None
     daily_meal_updates: list[DailyMealUpdate] = Field(default_factory=list, max_length=5)
     task_status_update: TaskStatusUpdateDraft | None = None
+    skylight_actions: list[SkylightAction] = Field(default_factory=list, max_length=5)
 
 
 class RecentMemoryEntry(BaseModel):
@@ -585,6 +603,100 @@ AGENT_OUTPUT_JSON_SCHEMA = {
                 },
             ]
         },
+        "skylight_actions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "tool": {
+                        "type": "string",
+                        "enum": [
+                            "get_tasks",
+                            "create_chore",
+                            "get_events",
+                            "get_meals",
+                            "create_meal",
+                            "update_meal_recipe",
+                            "delete_meal_sitting",
+                        ],
+                    },
+                    "arguments": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "after": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "before": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "include_task_box": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "include_chores": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "include_late": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "date_min": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "date_max": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "timezone": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "include": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "summary": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "category_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "category_ids": {
+                                "anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]
+                            },
+                            "date": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "start": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "start_time": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "recurrence_set": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "reward_points": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                            "emoji_icon": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "routine": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "up_for_grabs": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "description": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "meal_category_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "meal_recipe_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "rrule": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "add_to_grocery_list": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "save_to_recipe_box": {"anyOf": [{"type": "boolean"}, {"type": "null"}]},
+                            "recipe_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "sitting_id": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                            "instance_date": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+                        },
+                        "required": [
+                            "after",
+                            "before",
+                            "include_task_box",
+                            "include_chores",
+                            "include_late",
+                            "date_min",
+                            "date_max",
+                            "timezone",
+                            "include",
+                            "summary",
+                            "category_id",
+                            "category_ids",
+                            "date",
+                            "start",
+                            "start_time",
+                            "recurrence_set",
+                            "reward_points",
+                            "emoji_icon",
+                            "routine",
+                            "up_for_grabs",
+                            "description",
+                            "meal_category_id",
+                            "meal_recipe_id",
+                            "note",
+                            "rrule",
+                            "add_to_grocery_list",
+                            "save_to_recipe_box",
+                            "recipe_id",
+                            "sitting_id",
+                            "instance_date",
+                        ],
+                    },
+                },
+                "required": ["tool", "arguments"],
+            },
+            "maxItems": 5,
+            "description": "Validated backend-executed actions for Skylight Calendar MCP.",
+        },
     },
     "required": [
         "reply",
@@ -601,5 +713,6 @@ AGENT_OUTPUT_JSON_SCHEMA = {
         "daily_meal_update",
         "daily_meal_updates",
         "task_status_update",
+        "skylight_actions",
     ],
 }

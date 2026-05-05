@@ -7,6 +7,7 @@ from typing import Protocol
 from app.config import Settings
 from app.openai_client import AgentModelError, OpenAIAgentClient
 from app.schemas import AgentMemoryUpdates, AgentOutput, AgentTaskDraft, DailyMealUpdate, RecurringAgentTaskDraft, RecurringAgentTaskRecord, ReminderDraft, ReminderRecord, RepeatingReminderDraft, TaskStatusUpdateDraft, ZaloIncomingRequest, ZaloIncomingResponse
+from app.skylight_client import SkylightMCPClient
 from app.storage import FileStore
 from app.thread_context import build_thread_key
 
@@ -31,11 +32,13 @@ class FamilyAssistantService:
         store: FileStore,
         model_client: OpenAIAgentClient,
         sender: MessageSender,
+        skylight_client: SkylightMCPClient | None = None,
     ) -> None:
         self.settings = settings
         self.store = store
         self.model_client = model_client
         self.sender = sender
+        self.skylight_client = skylight_client
 
     @property
     def conversation_turn_context_limit(self) -> int:
@@ -92,6 +95,55 @@ class FamilyAssistantService:
                 agent_task=None,
                 recurring_agent_task=None,
             )
+
+        skylight_actions = list(output.skylight_actions)
+        skylight_results: list[dict] = []
+        skylight_error = None
+        if skylight_actions:
+            if self.skylight_client is None:
+                skylight_error = "skylight_client_not_configured"
+                skylight_results = [
+                    {
+                        "tool": action.tool,
+                        "arguments": action.arguments,
+                        "ok": False,
+                        "error": skylight_error,
+                    }
+                    for action in skylight_actions
+                ]
+            else:
+                skylight_results = await self.skylight_client.execute_actions(skylight_actions)
+
+            try:
+                output = await self.model_client.run(
+                    agent_prompt=agent_prompt,
+                    profile=profile,
+                    rules_text=rules_text,
+                    thread_key=thread_key,
+                    thread_prompt=thread_prompt,
+                    thread_rules=thread_rules,
+                    recent=recent,
+                    conversation_turns=conversation_turns,
+                    fridge=fridge,
+                    fridge_warnings=fridge_warnings,
+                    daily_meals=daily_meals,
+                    food_places=food_places,
+                    open_tasks=open_tasks,
+                    skylight_results=skylight_results,
+                    payload=payload,
+                    now=now,
+                )
+            except AgentModelError as exc:
+                skylight_error = str(exc)
+                print("SKYLIGHT_FINAL_MODEL_ERROR", str(exc))
+                output = AgentOutput(
+                    reply="Gia đã gọi Skylight rồi nhưng chưa tổng hợp được câu trả lời. Anh chị thử lại giúp Gia nha.",
+                    memory=AgentMemoryUpdates(),
+                    reminder=None,
+                    repeating_reminder=None,
+                    agent_task=None,
+                    recurring_agent_task=None,
+                )
 
         accepted_profile = self.store.append_profile_updates(output.memory.profile_updates)
         accepted_rules = self.store.append_rules_updates(output.rules_updates)
@@ -201,6 +253,9 @@ class FamilyAssistantService:
             task_status_update=output.task_status_update,
             task_status_updated=task_status_updated,
             task_status_error=task_status_error,
+            skylight_actions=skylight_actions,
+            skylight_results=skylight_results,
+            skylight_error=skylight_error,
         )
 
     async def run_agent_task(self, record: ReminderRecord | RecurringAgentTaskRecord):
